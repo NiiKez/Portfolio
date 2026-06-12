@@ -1,8 +1,13 @@
 import { z } from 'zod';
 
 const clientEnvSchema = z.object({
-  NEXT_PUBLIC_SUPABASE_URL: z.url(),
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
+  // `.trim()` first: a stray trailing space in the deployed value (e.g.
+  // `https://x.supabase.co `) survives `z.url()` because the WHATWG URL parser
+  // trims it, but it then corrupts every `${url}/storage/...` string we build —
+  // Next's image optimizer rejects it as an invalid `url` parameter. Trimming
+  // here makes a rebuild self-heal regardless of how the env var was set.
+  NEXT_PUBLIC_SUPABASE_URL: z.string().trim().pipe(z.url()),
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().trim().min(1),
 });
 
 export type ClientEnv = z.infer<typeof clientEnvSchema>;

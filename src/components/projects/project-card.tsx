@@ -2,6 +2,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { PlayIcon } from 'lucide-react';
 
+import { clientEnv } from '@/lib/env.client';
 import type { ProjectWithDetails } from '@/types';
 
 type ProjectCardProps = {
@@ -9,7 +10,7 @@ type ProjectCardProps = {
 };
 
 function screenshotUrl(storagePath: string) {
-  return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${storagePath}`;
+  return `${clientEnv.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${storagePath}`;
 }
 
 export function ProjectCard({ project }: ProjectCardProps) {

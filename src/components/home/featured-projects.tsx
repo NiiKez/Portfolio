@@ -7,6 +7,7 @@ import { ArrowRight, ExternalLink, Globe, PlayIcon } from 'lucide-react';
 
 import { GitHubIcon } from '@/components/icons/social-icons';
 import { SpotlightCard } from '@/components/projects/spotlight-card';
+import { clientEnv } from '@/lib/env.client';
 import { markdownToPlainText } from '@/lib/markdown';
 import type { ProjectWithDetails } from '@/types';
 
@@ -15,7 +16,7 @@ type FeaturedProjectsProps = {
 };
 
 function screenshotUrl(storagePath: string) {
-  return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${storagePath}`;
+  return `${clientEnv.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${storagePath}`;
 }
 
 export function FeaturedProjects({ projects }: FeaturedProjectsProps) {

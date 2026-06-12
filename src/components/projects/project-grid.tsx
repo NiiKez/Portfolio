@@ -7,6 +7,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { ArrowUpRight, ExternalLink, Globe } from 'lucide-react';
 
 import { GitHubIcon } from '@/components/icons/social-icons';
+import { clientEnv } from '@/lib/env.client';
 import { markdownToPlainText } from '@/lib/markdown';
 import type { ProjectWithDetails } from '@/types';
 
@@ -21,7 +22,7 @@ const GRADIENT_FALLBACKS = [
 ];
 
 function screenshotUrl(storagePath: string) {
-  return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${storagePath}`;
+  return `${clientEnv.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${storagePath}`;
 }
 
 export function ProjectGrid({ projects }: ProjectGridProps) {

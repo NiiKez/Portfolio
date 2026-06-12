@@ -68,6 +68,19 @@ describe('env.client', () => {
     );
   });
 
+  it('trims surrounding whitespace from NEXT_PUBLIC_SUPABASE_URL', async () => {
+    // A stray trailing space in the deployed value would otherwise corrupt
+    // every `${url}/storage/...` image src and break Next's image optimizer.
+    process.env.NEXT_PUBLIC_SUPABASE_URL = '  https://example.supabase.co  ';
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'anon-key';
+
+    const mod =
+      await importFresh<typeof import('@/lib/env.client')>('@/lib/env.client');
+    expect(mod.clientEnv.NEXT_PUBLIC_SUPABASE_URL).toBe(
+      'https://example.supabase.co',
+    );
+  });
+
   it('throws on access when NEXT_PUBLIC_SUPABASE_ANON_KEY is empty', async () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co';
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = '';
