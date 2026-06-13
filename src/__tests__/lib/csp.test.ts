@@ -33,7 +33,7 @@ describe('buildCsp', () => {
   });
 
   it('puts the nonce in script-src and never uses unsafe-inline for scripts', () => {
-    process.env.NODE_ENV = 'production';
+    process.env = { ...process.env, NODE_ENV: 'production' };
     const csp = buildCsp('NONCE123');
     const scriptSrc = directive(csp, 'script-src')!;
 
@@ -43,13 +43,13 @@ describe('buildCsp', () => {
   });
 
   it("does not allow 'unsafe-eval' in production", () => {
-    process.env.NODE_ENV = 'production';
+    process.env = { ...process.env, NODE_ENV: 'production' };
     const scriptSrc = directive(buildCsp('n'), 'script-src')!;
     expect(scriptSrc).not.toContain('unsafe-eval');
   });
 
   it("allows 'unsafe-eval' in development (for Fast Refresh)", () => {
-    process.env.NODE_ENV = 'development';
+    process.env = { ...process.env, NODE_ENV: 'development' };
     const scriptSrc = directive(buildCsp('n'), 'script-src')!;
     expect(scriptSrc).toContain("'unsafe-eval'");
   });

@@ -88,7 +88,7 @@ public/                      # Static assets
 ### Prerequisites
 
 - Node.js `>= 20`
-- A Supabase project (this repo shares one; see [Database & security](#database--security)).
+- A Supabase project (this repo shares one).
 
 ### 1. Install
 
@@ -220,65 +220,6 @@ hidden from the public site (excluded from the header/footer, disallowed in robo
   - `update_project_with_techs` — update the row and replace its tech links in one transaction.
   - `reorder_projects` / `reorder_skills` / `reorder_experiences` /
     `reorder_project_screenshots` — bulk reorder in a single statement.
-
----
-
-## Database & security
-
-The backend is a **Supabase** Postgres project. All app tables live in the `portfolio`
-schema. (This project shares its Supabase instance with a separate app; portfolio code and
-schema are kept isolated — see `CLAUDE.md` and `supabase/README.md`.)
-
-### Schema
-
-| Table                  | Notes                                                                                                   |
-| ---------------------- | ------------------------------------------------------------------------------------------------------- |
-| `projects`             | title, description, `github_url`, `live_url`, `demo_video_path`, `demo_video_poster_path`, `sort_order` |
-| `skills`               | name, category, `proficiency` (`beginner` / `intermediate` / `advanced`, CHECK), `sort_order`           |
-| `experiences`          | role, company, `company_url`, location, period, kind, description, `technologies text[]`, `sort_order`  |
-| `project_screenshots`  | `project_id` FK (CASCADE), `storage_path`, `alt_text`, `sort_order`                                     |
-| `project_technologies` | join table, `PK(project_id, skill_id)`, both FKs CASCADE                                                |
-| `app_config`           | key/value; holds `admin_email`. RLS on with **no policies** (clients can't read it)                     |
-
-FKs are indexed and cascade on delete; `updated_at` triggers exist on
-projects/skills/experiences. The original DDL is version-controlled in
-`supabase/migrations/20260603000000_baseline_schema.sql`.
-
-### Row-Level Security (public read, admin write)
-
-Every content table has exactly two policies:
-
-- **`public_read`** — `SELECT` for `anon, authenticated`, `using (true)`.
-- **`admin_write`** — `ALL` for `authenticated`, gated by `portfolio.is_admin()`.
-
-`portfolio.is_admin()` is a `SECURITY DEFINER` function that returns true only when the
-caller's verified JWT email matches the `admin_email` row in `portfolio.app_config`. Because
-that table has RLS with no policies, only the definer function can read it.
-
-> An earlier design gated writes on the `app.admin_email` Postgres GUC, but managed Supabase
-> denies `ALTER DATABASE ... SET` to the dashboard role, so those policies failed closed. The
-> `app_config` table replaces that approach. **To change the admin identity, update both** the
-> `ADMIN_EMAIL` env var **and** the `app_config` row.
-
-### Storage
-
-Two public-read, admin-write buckets on `storage.objects`, gated by the same
-`portfolio.is_admin()`:
-
-- **`screenshots`** — project gallery images and video posters; uploaded via the
-  **authenticated** client (RLS-enforced).
-- **`videos`** — demo videos (≤ 100 MB, MP4/WebM); uploaded via the **service-role** client
-  because signed upload URLs are minted server-side. The RLS policies remain a
-  defense-in-depth backstop.
-
-### Migration workflow
-
-Migrations in `supabase/migrations/` are the **version-control record** of SQL that is
-**applied manually** via the Supabase Dashboard → SQL Editor — there is no `supabase db
-push` and nothing auto-applies them. Each file is written **idempotently**
-(`create ... if not exists`, `drop policy if exists` before `create policy`,
-`create or replace function`) so a manual re-run is a safe no-op. To make a change: write the
-file, run it in the dashboard, verify, then commit.
 
 ---
 
