@@ -249,6 +249,52 @@ describe('ProjectGallery — lightbox', () => {
     expect(within(dialog).getByText('1 / 3')).toBeInTheDocument();
   });
 
+  it('navigates with the arrow keys inside the lightbox', async () => {
+    const user = userEvent.setup();
+    render(
+      <ProjectGallery
+        screenshots={[makeShot('a'), makeShot('b'), makeShot('c')]}
+        projectTitle="Portfolio"
+      />,
+    );
+
+    await user.click(
+      screen.getByRole('button', { name: /View image full screen/i }),
+    );
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('1 / 3')).toBeInTheDocument();
+
+    await user.keyboard('{ArrowRight}');
+    expect(within(dialog).getByText('2 / 3')).toBeInTheDocument();
+
+    await user.keyboard('{ArrowLeft}');
+    expect(within(dialog).getByText('1 / 3')).toBeInTheDocument();
+  });
+
+  it('ignores arrow keys and shows no counter with a single screenshot', async () => {
+    const user = userEvent.setup();
+    render(
+      <ProjectGallery
+        screenshots={[makeShot('a', 'Dashboard')]}
+        projectTitle="Portfolio"
+      />,
+    );
+
+    await user.click(
+      screen.getByRole('button', { name: /View image full screen/i }),
+    );
+
+    const dialog = screen.getByRole('dialog');
+    // The hasMultiple guard means there's no slide counter to begin with.
+    expect(within(dialog).queryByText(/\d+ \/ \d+/)).not.toBeInTheDocument();
+
+    // Arrow keys are no-ops, and the lightbox stays open (only Escape closes it).
+    await user.keyboard('{ArrowRight}{ArrowLeft}');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(within(dialog).queryByText(/\d+ \/ \d+/)).not.toBeInTheDocument();
+  });
+
   it('moves focus to the close button when the lightbox opens', async () => {
     const user = userEvent.setup();
     render(

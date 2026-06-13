@@ -18,6 +18,20 @@ describe('generateNonce', () => {
   it('produces a different value each call', () => {
     expect(generateNonce()).not.toBe(generateNonce());
   });
+
+  it('decodes to 16 random bytes (not a short/predictable token)', () => {
+    // "differs each call" alone would also pass for a weak generator like an
+    // incrementing counter or Date.now(); both differ yet are guessable, which
+    // defeats the nonce. Pin the width to 16 bytes so a swap to a predictable
+    // short token fails here.
+    const decoded = Buffer.from(generateNonce(), 'base64');
+    expect(decoded.length).toBe(16);
+  });
+
+  it('is collision-free across a large batch (entropy floor)', () => {
+    const batch = Array.from({ length: 1000 }, () => generateNonce());
+    expect(new Set(batch).size).toBe(batch.length);
+  });
 });
 
 describe('buildCsp', () => {
@@ -69,6 +83,11 @@ describe('buildCsp', () => {
     expect(directive(csp, 'media-src')).toContain('https://proj.supabase.co');
     expect(directive(csp, 'connect-src')).toContain('https://proj.supabase.co');
     expect(directive(csp, 'connect-src')).toContain('wss://proj.supabase.co');
+    // When a concrete host is configured, the broad `*.supabase.co` wildcard
+    // (any project on the platform) must NOT also be present — otherwise a
+    // regression that appended both would silently widen the allowlist.
+    expect(directive(csp, 'connect-src')).not.toContain('*.supabase.co');
+    expect(directive(csp, 'img-src')).not.toContain('*.supabase.co');
   });
 
   it('keeps unsafe-inline for styles only (Tailwind / inline style props)', () => {

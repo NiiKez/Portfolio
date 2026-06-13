@@ -103,4 +103,26 @@ describe('GET /auth/callback', () => {
     expect(loc.searchParams.get('error')).toBeNull();
     expect(signOut).not.toHaveBeenCalled();
   });
+
+  it('ignores a ?next open-redirect param and lands on /admin under the request origin', async () => {
+    // Regression guard: the route currently does NOT honour any `next` /
+    // `redirect_to` query param — it only ever redirects to hardcoded paths under
+    // the server-derived `origin`. A successful admin callback carrying an
+    // attacker-supplied `?next=https://evil.com` must still land on `/admin` on
+    // OUR origin, with the attacker's URL having had no effect. This locks in the
+    // safe behaviour so a future "preserve the next page" change can't silently
+    // introduce an open redirect.
+    const res = await GET(
+      makeRequest(
+        'http://localhost:3000/auth/callback?code=abc&next=https://evil.com',
+      ),
+    );
+
+    expect(res.status).toBe(307);
+    const loc = location(res);
+    expect(loc.origin).toBe('http://localhost:3000');
+    expect(loc.pathname).toBe('/admin');
+    // The attacker's host never appears anywhere in the redirect target.
+    expect(res.headers.get('location')).not.toContain('evil.com');
+  });
 });

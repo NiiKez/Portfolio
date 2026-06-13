@@ -215,6 +215,32 @@ describe('VideoPosterPicker — file validation & staging', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('stages a file exactly at the 5MB cap (boundary is inclusive)', async () => {
+    // The reject test above uses cap+1; pin the other side of the strict `>`
+    // check so a regression to `>=` (rejecting a valid at-cap image) fails here.
+    render(
+      <VideoPosterPicker
+        projectId={projectId}
+        videoPath={videoPath}
+        initialPosterPath={null}
+      />,
+    );
+
+    const input = screen.getByLabelText(
+      /Or upload an image/i,
+    ) as HTMLInputElement;
+    fireEvent.change(input, {
+      target: {
+        files: [makeImageFile('exact.jpg', 'image/jpeg', 5 * 1024 * 1024)],
+      },
+    });
+
+    expect(
+      await screen.findByRole('button', { name: /Set as poster/i }),
+    ).toBeInTheDocument();
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
   it('ignores a change event with no file selected', () => {
     render(
       <VideoPosterPicker

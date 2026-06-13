@@ -52,7 +52,8 @@ export default defineConfig({
         'src/components/about/copy-email-button.tsx',
         'src/components/home/**',
         'src/components/icons/**',
-        'src/components/projects/markdown-content.tsx',
+        // markdown-content.tsx is intentionally measured: it carries the
+        // no-rehype-raw stored-XSS guard (markdown-content.test.tsx).
         'src/components/projects/spotlight-card.tsx',
         'src/components/header.tsx',
         'src/components/footer.tsx',

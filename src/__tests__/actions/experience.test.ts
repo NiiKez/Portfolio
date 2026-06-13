@@ -183,6 +183,12 @@ describe('deleteExperience', () => {
 
     expect(result).toEqual({ success: true, data: { id: validId } });
     expect(fromMock).toHaveBeenCalledWith('experiences');
+    // The delete must be scoped by id — a dropped WHERE clause would wipe EVERY
+    // experience row in real Postgres, which the mock only catches here.
+    const chain = fromMock.mock.results[0]!.value as {
+      eq: ReturnType<typeof vi.fn>;
+    };
+    expect(chain.eq).toHaveBeenCalledWith('id', validId);
     expect(revalidatePath).toHaveBeenCalledWith('/about');
     expect(revalidatePath).toHaveBeenCalledWith('/admin/experience');
   });
@@ -231,6 +237,12 @@ describe('updateExperience', () => {
 
     expect(result).toEqual({ success: true, data: updated });
     expect(fromMock).toHaveBeenCalledWith('experiences');
+    // The update must be scoped by id — a dropped WHERE clause would rewrite
+    // EVERY experience row in real Postgres, which the mock only catches here.
+    const chain = fromMock.mock.results[0]!.value as {
+      eq: ReturnType<typeof vi.fn>;
+    };
+    expect(chain.eq).toHaveBeenCalledWith('id', validId);
     expect(revalidatePath).toHaveBeenCalledWith('/about');
     expect(revalidatePath).toHaveBeenCalledWith('/admin/experience');
   });

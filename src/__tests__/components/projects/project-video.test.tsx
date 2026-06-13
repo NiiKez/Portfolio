@@ -102,6 +102,59 @@ describe('ProjectVideo', () => {
     );
   });
 
+  it('calls video.play() when the play button is clicked', async () => {
+    const user = userEvent.setup();
+    const playSpy = vi
+      .spyOn(HTMLVideoElement.prototype, 'play')
+      .mockResolvedValue(undefined);
+    render(
+      <ProjectVideo
+        videoPath="proj/demo.mp4"
+        posterPath="proj/hero.png"
+        projectTitle="Prodstack"
+      />,
+    );
+
+    await user.click(
+      screen.getByRole('button', { name: /Play demo video for Prodstack/i }),
+    );
+
+    expect(playSpy).toHaveBeenCalledTimes(1);
+
+    playSpy.mockRestore();
+  });
+
+  it('swallows a rejected play() promise without throwing', async () => {
+    const user = userEvent.setup();
+    // Simulate an autoplay-blocked browser: play() rejects. The component must
+    // swallow it (native controls are now visible) rather than surface an
+    // unhandled rejection.
+    const playSpy = vi
+      .spyOn(HTMLVideoElement.prototype, 'play')
+      .mockRejectedValue(new DOMException('blocked', 'NotAllowedError'));
+    render(
+      <ProjectVideo
+        videoPath="proj/demo.mp4"
+        posterPath="proj/hero.png"
+        projectTitle="Prodstack"
+      />,
+    );
+
+    await user.click(
+      screen.getByRole('button', { name: /Play demo video for Prodstack/i }),
+    );
+    // Let the rejected microtask settle so an unhandled rejection would surface.
+    await Promise.resolve();
+
+    expect(playSpy).toHaveBeenCalledTimes(1);
+    // Playback still hands off to native controls despite the rejection.
+    expect(document.querySelector('video')?.hasAttribute('controls')).toBe(
+      true,
+    );
+
+    playSpy.mockRestore();
+  });
+
   it('hands off to native controls when playback starts via the video element', () => {
     render(
       <ProjectVideo

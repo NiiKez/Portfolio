@@ -71,4 +71,30 @@ describe('markdownToPlainText', () => {
   it('returns an empty string for empty input', () => {
     expect(markdownToPlainText('')).toBe('');
   });
+
+  it('strips <script> tags and their contents, keeping surrounding text', () => {
+    const text = markdownToPlainText('<script>alert(1)</script> hello');
+
+    // The <script>…</script> block is removed entirely (tags + contents).
+    expect(text).toBe('hello');
+    expect(text).not.toContain('<script');
+    expect(text).not.toContain('</script');
+    expect(text).not.toContain('alert(1)');
+    // No raw angle brackets survive.
+    expect(text).not.toContain('<');
+    expect(text).not.toContain('>');
+  });
+
+  it('strips an <img onerror=…> tag, keeping the caption text', () => {
+    const text = markdownToPlainText('<img src=x onerror=alert(1)> caption');
+
+    expect(text).toBe('caption');
+    expect(text).not.toContain('onerror');
+    expect(text).not.toContain('<');
+    expect(text).not.toContain('>');
+  });
+
+  it('strips paired HTML tags but keeps their inner text', () => {
+    expect(markdownToPlainText('<b>bold</b> text')).toBe('bold text');
+  });
 });

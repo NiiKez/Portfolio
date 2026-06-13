@@ -1,10 +1,16 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
-import { rateLimit } from '@/lib/rate-limit';
+import { __resetRateLimit, rateLimit } from '@/lib/rate-limit';
 
 const WINDOW = 15 * 60 * 1000;
+
+beforeEach(() => {
+  // The store is module-global and never reset on its own; clear it so cases do
+  // not depend on hand-picked unique keys to avoid counter bleed.
+  __resetRateLimit();
+});
 
 afterEach(() => {
   vi.useRealTimers();
