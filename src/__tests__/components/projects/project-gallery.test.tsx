@@ -160,9 +160,9 @@ describe('ProjectGallery', () => {
     expect(screen.getByAltText('Portfolio screenshot 3')).toBeInTheDocument();
 
     // Only the active screenshot is exposed; the rest are hidden from a11y.
-    expect(
-      screen.getByAltText('Portfolio screenshot 1'),
-    ).not.toHaveAttribute('aria-hidden');
+    expect(screen.getByAltText('Portfolio screenshot 1')).not.toHaveAttribute(
+      'aria-hidden',
+    );
     expect(screen.getByAltText('Portfolio screenshot 2')).toHaveAttribute(
       'aria-hidden',
       'true',
