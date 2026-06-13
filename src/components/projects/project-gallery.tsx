@@ -126,10 +126,6 @@ export function ProjectGallery({
 
   if (total === 0) return null;
 
-  const active = screenshots[safeIndex]!;
-  const activeAlt =
-    active.alt_text ?? `${projectTitle} screenshot ${safeIndex + 1}`;
-
   return (
     <div className="space-y-3">
       <div className="group relative aspect-video w-full overflow-hidden rounded-lg border border-border bg-muted">
@@ -137,18 +133,32 @@ export function ProjectGallery({
           type="button"
           onClick={() => setLightboxOpen(true)}
           aria-label="View image full screen"
-          className="block h-full w-full cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="relative block h-full w-full cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <Image
-            key={active.id}
-            src={publicUrl(active.storage_path)}
-            alt={activeAlt}
-            width={1600}
-            height={900}
-            sizes="(min-width: 1024px) 960px, 100vw"
-            className="h-full w-full object-contain"
-            priority={safeIndex === 0}
-          />
+          {/*
+            Every screenshot is mounted and stacked, with only the active one
+            at full opacity. They load in parallel when the gallery enters the
+            viewport, so navigating is an instant opacity toggle instead of a
+            per-click remount + network fetch (which made switching feel
+            unresponsive — "I click, nothing happens, then it eventually
+            switches").
+          */}
+          {screenshots.map((shot, index) => (
+            <Image
+              key={shot.id}
+              src={publicUrl(shot.storage_path)}
+              alt={shot.alt_text ?? `${projectTitle} screenshot ${index + 1}`}
+              width={1600}
+              height={900}
+              sizes="(min-width: 1024px) 960px, 100vw"
+              className={cn(
+                'absolute inset-0 h-full w-full object-contain transition-opacity duration-200',
+                index === safeIndex ? 'opacity-100' : 'opacity-0',
+              )}
+              priority={index === 0}
+              aria-hidden={index === safeIndex ? undefined : true}
+            />
+          ))}
         </button>
 
         <span className="pointer-events-none absolute left-2 top-2 rounded-full bg-background/80 p-1.5 text-foreground opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
@@ -254,15 +264,32 @@ export function ProjectGallery({
             className="relative flex min-h-0 flex-1 items-center justify-center px-4 pb-6"
             onClick={(e) => e.stopPropagation()}
           >
-            <Image
-              key={active.id}
-              src={publicUrl(active.storage_path)}
-              alt={activeAlt}
-              width={1920}
-              height={1080}
-              sizes="100vw"
-              className="max-h-full w-auto max-w-full object-contain"
-            />
+            {/* Stacked like the inline frame so lightbox navigation is an
+                instant opacity toggle rather than a remount + fetch. */}
+            {screenshots.map((shot, index) => (
+              <div
+                key={shot.id}
+                aria-hidden={index === safeIndex ? undefined : true}
+                className={cn(
+                  'absolute inset-0 flex items-center justify-center px-4 pb-6 transition-opacity duration-200',
+                  index === safeIndex
+                    ? 'opacity-100'
+                    : 'pointer-events-none opacity-0',
+                )}
+              >
+                <Image
+                  src={publicUrl(shot.storage_path)}
+                  alt={
+                    shot.alt_text ?? `${projectTitle} screenshot ${index + 1}`
+                  }
+                  width={1920}
+                  height={1080}
+                  sizes="100vw"
+                  className="max-h-full w-auto max-w-full object-contain"
+                  priority={index === safeIndex}
+                />
+              </div>
+            ))}
 
             {hasMultiple && (
               <>
