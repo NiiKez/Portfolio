@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
+import { buildCsp, generateNonce } from '@/lib/csp';
 import { env } from '@/lib/env';
 import { updateSession } from '@/lib/supabase/middleware';
 
@@ -40,7 +41,22 @@ export async function middleware(request: NextRequest) {
   const blocked = siteGate(request);
   if (blocked) return blocked;
 
-  const { response, user } = await updateSession(request);
+  // Per-request CSP nonce. It is injected into the forwarded request headers so
+  // Next.js stamps it onto its own inline bootstrap scripts (and so the root
+  // layout can read it for next-themes via `x-nonce`), and set on the response
+  // so the browser enforces it. Because the nonce changes every request, the
+  // CSP cannot live in the static `next.config.ts` header set, and pages must
+  // render dynamically (see `export const dynamic` in the root layout) — a
+  // cached page would carry a stale nonce that no longer matches the header.
+  const nonce = generateNonce();
+  const csp = buildCsp(nonce);
+
+  const { response, user } = await updateSession(request, {
+    'x-nonce': nonce,
+    'Content-Security-Policy': csp,
+  });
+  response.headers.set('Content-Security-Policy', csp);
+
   const { pathname } = request.nextUrl;
 
   const isLoginRoute = pathname === '/admin/login';

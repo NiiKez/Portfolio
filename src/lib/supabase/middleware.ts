@@ -10,9 +10,27 @@ import { env } from '@/lib/env';
  * `Set-Cookie` headers written by the Supabase client during a token
  * refresh. The caller (the project-root `middleware.ts`) is responsible
  * for any redirects after this runs.
+ *
+ * `extraRequestHeaders` are merged onto the forwarded request headers so values
+ * the caller computes per request (the CSP nonce: `x-nonce` +
+ * `Content-Security-Policy`) reach the downstream render. The forwarded headers
+ * are rebuilt from the live `request` AFTER any cookie refresh, so both the
+ * refreshed auth cookies and the extra headers propagate together.
  */
-export async function updateSession(request: NextRequest) {
-  let response = NextResponse.next({ request });
+export async function updateSession(
+  request: NextRequest,
+  extraRequestHeaders?: Record<string, string>,
+) {
+  function nextResponse() {
+    if (!extraRequestHeaders) return NextResponse.next({ request });
+    const headers = new Headers(request.headers);
+    for (const [name, value] of Object.entries(extraRequestHeaders)) {
+      headers.set(name, value);
+    }
+    return NextResponse.next({ request: { headers } });
+  }
+
+  let response = nextResponse();
 
   const supabase = createServerClient(
     env.NEXT_PUBLIC_SUPABASE_URL,
@@ -26,7 +44,7 @@ export async function updateSession(request: NextRequest) {
           for (const { name, value } of cookiesToSet) {
             request.cookies.set(name, value);
           }
-          response = NextResponse.next({ request });
+          response = nextResponse();
           for (const { name, value, options } of cookiesToSet) {
             response.cookies.set(name, value, options);
           }

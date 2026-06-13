@@ -12,8 +12,6 @@ export const metadata: Metadata = {
     'A personal portfolio showcasing my skills, projects, and professional experience.',
 };
 
-export const revalidate = 3600;
-
 export default async function HomePage() {
   const [skills, projects] = await Promise.all([getSkills(), getProjects()]);
 

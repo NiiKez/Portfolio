@@ -5,8 +5,9 @@ It pairs a polished, animated public site with a complete, security-hardened **a
 panel** that manages all content — projects, skills, work experience, screenshots, and
 demo videos — without touching code.
 
-The public site is statically rendered with ISR; the admin panel is a server-action CMS
-guarded by magic-link auth, an `ADMIN_EMAIL` gate, and Postgres Row-Level Security.
+The public site is server-rendered (dynamic, with a per-request CSP nonce); the admin
+panel is a server-action CMS guarded by magic-link auth, an `ADMIN_EMAIL` gate, and
+Postgres Row-Level Security.
 
 ---
 
@@ -29,20 +30,20 @@ guarded by magic-link auth, an `ADMIN_EMAIL` gate, and Postgres Row-Level Securi
 
 ## Tech stack
 
-| Area        | Choice                                                                      |
-| ----------- | --------------------------------------------------------------------------- |
-| Framework   | Next.js `16.2.6` (App Router, middleware, server actions, API routes, ISR)  |
-| UI          | React `19.2.4`, TypeScript `5`, Tailwind CSS `4`, `@tailwindcss/typography` |
-| Components  | `@base-ui/react`, `lucide-react` icons, `sonner` toasts, `next-themes`      |
-| Animation   | `motion` (Framer Motion) `12`                                               |
-| Drag & drop | `@dnd-kit/core` + `@dnd-kit/sortable`                                       |
-| Markdown    | `react-markdown` + `remark-gfm`                                             |
-| Backend     | Supabase — `@supabase/supabase-js`, `@supabase/ssr`                         |
-| Validation  | `zod` `4`                                                                   |
-| Logging     | `winston`                                                                   |
-| Testing     | `vitest` `4`, `@testing-library/react`, `msw`, `@vitest/coverage-v8`        |
-| Tooling     | ESLint `9` (flat config), Prettier                                          |
-| Runtime     | Node.js `>= 20`                                                             |
+| Area        | Choice                                                                             |
+| ----------- | ---------------------------------------------------------------------------------- |
+| Framework   | Next.js `16.2.6` (App Router, middleware, server actions, API routes, dynamic SSR) |
+| UI          | React `19.2.4`, TypeScript `5`, Tailwind CSS `4`, `@tailwindcss/typography`        |
+| Components  | `@base-ui/react`, `lucide-react` icons, `sonner` toasts, `next-themes`             |
+| Animation   | `motion` (Framer Motion) `12`                                                      |
+| Drag & drop | `@dnd-kit/core` + `@dnd-kit/sortable`                                              |
+| Markdown    | `react-markdown` + `remark-gfm`                                                    |
+| Backend     | Supabase — `@supabase/supabase-js`, `@supabase/ssr`                                |
+| Validation  | `zod` `4`                                                                          |
+| Logging     | `winston`                                                                          |
+| Testing     | `vitest` `4`, `@testing-library/react`, `msw`, `@vitest/coverage-v8`               |
+| Tooling     | ESLint `9` (flat config), Prettier                                                 |
+| Runtime     | Node.js `>= 20`                                                                    |
 
 ---
 
@@ -53,7 +54,7 @@ src/
 ├── app/                     # App Router routes
 │   ├── page.tsx             # Home (/)
 │   ├── about/               # About hub: bio + experience + tech stack + contact
-│   ├── projects/            # Projects list + [id] detail (generateStaticParams + ISR)
+│   ├── projects/            # Projects list + [id] detail (dynamic SSR)
 │   ├── admin/               # Admin panel (gated by middleware)
 │   ├── api/auth/send-otp/   # Rate-limited magic-link endpoint
 │   ├── auth/                # callback / signout
@@ -87,7 +88,7 @@ public/                      # Static assets
 ### Prerequisites
 
 - Node.js `>= 20`
-- A Supabase project (this repo shares one; see [Database & security](#database--security)).
+- A Supabase project (this repo shares one).
 
 ### 1. Install
 
@@ -130,7 +131,8 @@ npm run dev      # http://localhost:3001  (note: port 3001, not 3000)
 | `npm run test:ci` | Vitest run with coverage                    |
 
 > The app **cannot be statically exported** — it relies on middleware, server actions,
-> API routes, and ISR, so it needs a Node.js server runtime (`next build && next start`).
+> API routes, and per-request dynamic rendering (a fresh CSP nonce per request), so it
+> needs a Node.js server runtime (`next build && next start`).
 
 ---
 
@@ -143,8 +145,9 @@ npm run dev      # http://localhost:3001  (note: port 3001, not 3000)
 | `/projects`      | Filterable project list (filter pills by technology) with a sticky desktop preview pane                 |
 | `/projects/[id]` | Project detail: demo video (with poster), screenshot gallery + lightbox, markdown body, live/repo links |
 
-- **Rendering:** public pages use ISR (`revalidate = 3600`); project detail pages are
-  pre-built via `generateStaticParams()` and revalidate on demand.
+- **Rendering:** public pages are dynamically server-rendered per request
+  (`force-dynamic` in the root layout) so each response carries a fresh CSP nonce;
+  server actions call `revalidatePath()` to bust the data cache on content changes.
 - **Media:** the gallery is a keyboard-accessible carousel with a focus-trapped lightbox;
   the demo video lazy-loads behind a poster image.
 - **SEO:** `getBaseUrl()` (`src/lib/site-url.ts`) drives canonical URLs, the sitemap,
@@ -217,65 +220,6 @@ hidden from the public site (excluded from the header/footer, disallowed in robo
   - `update_project_with_techs` — update the row and replace its tech links in one transaction.
   - `reorder_projects` / `reorder_skills` / `reorder_experiences` /
     `reorder_project_screenshots` — bulk reorder in a single statement.
-
----
-
-## Database & security
-
-The backend is a **Supabase** Postgres project. All app tables live in the `portfolio`
-schema. (This project shares its Supabase instance with a separate app; portfolio code and
-schema are kept isolated — see `CLAUDE.md` and `supabase/README.md`.)
-
-### Schema
-
-| Table                  | Notes                                                                                                   |
-| ---------------------- | ------------------------------------------------------------------------------------------------------- |
-| `projects`             | title, description, `github_url`, `live_url`, `demo_video_path`, `demo_video_poster_path`, `sort_order` |
-| `skills`               | name, category, `proficiency` (`beginner` / `intermediate` / `advanced`, CHECK), `sort_order`           |
-| `experiences`          | role, company, `company_url`, location, period, kind, description, `technologies text[]`, `sort_order`  |
-| `project_screenshots`  | `project_id` FK (CASCADE), `storage_path`, `alt_text`, `sort_order`                                     |
-| `project_technologies` | join table, `PK(project_id, skill_id)`, both FKs CASCADE                                                |
-| `app_config`           | key/value; holds `admin_email`. RLS on with **no policies** (clients can't read it)                     |
-
-FKs are indexed and cascade on delete; `updated_at` triggers exist on
-projects/skills/experiences. The original DDL is version-controlled in
-`supabase/migrations/20260603000000_baseline_schema.sql`.
-
-### Row-Level Security (public read, admin write)
-
-Every content table has exactly two policies:
-
-- **`public_read`** — `SELECT` for `anon, authenticated`, `using (true)`.
-- **`admin_write`** — `ALL` for `authenticated`, gated by `portfolio.is_admin()`.
-
-`portfolio.is_admin()` is a `SECURITY DEFINER` function that returns true only when the
-caller's verified JWT email matches the `admin_email` row in `portfolio.app_config`. Because
-that table has RLS with no policies, only the definer function can read it.
-
-> An earlier design gated writes on the `app.admin_email` Postgres GUC, but managed Supabase
-> denies `ALTER DATABASE ... SET` to the dashboard role, so those policies failed closed. The
-> `app_config` table replaces that approach. **To change the admin identity, update both** the
-> `ADMIN_EMAIL` env var **and** the `app_config` row.
-
-### Storage
-
-Two public-read, admin-write buckets on `storage.objects`, gated by the same
-`portfolio.is_admin()`:
-
-- **`screenshots`** — project gallery images and video posters; uploaded via the
-  **authenticated** client (RLS-enforced).
-- **`videos`** — demo videos (≤ 100 MB, MP4/WebM); uploaded via the **service-role** client
-  because signed upload URLs are minted server-side. The RLS policies remain a
-  defense-in-depth backstop.
-
-### Migration workflow
-
-Migrations in `supabase/migrations/` are the **version-control record** of SQL that is
-**applied manually** via the Supabase Dashboard → SQL Editor — there is no `supabase db
-push` and nothing auto-applies them. Each file is written **idempotently**
-(`create ... if not exists`, `drop policy if exists` before `create policy`,
-`create or replace function`) so a manual re-run is a safe no-op. To make a change: write the
-file, run it in the dashboard, verify, then commit.
 
 ---
 
