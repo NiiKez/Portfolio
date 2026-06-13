@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import {
   DM_Serif_Display,
   Instrument_Sans,
@@ -11,6 +12,12 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { getBaseUrl } from '@/lib/site-url';
 
 import './globals.css';
+
+// The per-request CSP nonce (set by `src/middleware.ts`) is read below via
+// `headers()`, which opts every route into dynamic rendering. This is required:
+// nonce-based CSP is incompatible with cached/static HTML, since a cached page
+// would embed a stale nonce that no longer matches the per-request CSP header.
+export const dynamic = 'force-dynamic';
 
 const dmSerifDisplay = DM_Serif_Display({
   variable: '--font-display',
@@ -53,11 +60,15 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Set per request by `src/middleware.ts`; passed to next-themes so its
+  // pre-paint inline script carries the nonce and is not blocked by the CSP.
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
+
   return (
     <html
       lang="en"
@@ -76,6 +87,7 @@ export default function RootLayout({
           defaultTheme="dark"
           enableSystem
           disableTransitionOnChange
+          nonce={nonce}
         >
           <Header />
           <main id="main-content" className="flex-1">

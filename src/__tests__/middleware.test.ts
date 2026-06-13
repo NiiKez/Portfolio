@@ -101,6 +101,64 @@ describe('middleware', () => {
   });
 });
 
+describe('CSP nonce', () => {
+  it('sets a nonce-based Content-Security-Policy on the response', async () => {
+    mockSession(null);
+
+    const result = await middleware(requestFor('/'));
+
+    const csp = result.headers.get('content-security-policy');
+    expect(csp).toBeTruthy();
+    const scriptSrc = csp!.split('; ').find((d) => d.startsWith('script-src'));
+    expect(scriptSrc).toMatch(/'nonce-[A-Za-z0-9+/=]+'/);
+    expect(scriptSrc).toContain("'strict-dynamic'");
+    // The whole point of the migration: no inline-script escape hatch.
+    expect(scriptSrc).not.toContain("'unsafe-inline'");
+  });
+
+  it('forwards the same nonce to updateSession via the x-nonce request header', async () => {
+    mockSession(null);
+
+    const result = await middleware(requestFor('/'));
+
+    const csp = result.headers.get('content-security-policy')!;
+    const nonce = csp.match(/'nonce-([A-Za-z0-9+/=]+)'/)![1];
+
+    const extraHeaders = updateSession.mock.calls[0]![1] as Record<
+      string,
+      string
+    >;
+    expect(extraHeaders['x-nonce']).toBe(nonce);
+    expect(extraHeaders['Content-Security-Policy']).toBe(csp);
+  });
+
+  it('uses a fresh nonce on every request', async () => {
+    // A new response per call so each carries its own CSP header (the shared
+    // mockSession response would otherwise be mutated twice and compare equal).
+    updateSession.mockImplementation(async () => ({
+      response: NextResponse.next(),
+      user: null,
+    }));
+
+    const first = await middleware(requestFor('/'));
+    const second = await middleware(requestFor('/'));
+
+    expect(first.headers.get('content-security-policy')).not.toBe(
+      second.headers.get('content-security-policy'),
+    );
+  });
+
+  it('does not set a CSP on the site-password 401 challenge', async () => {
+    mockEnv.env.SITE_PASSWORD = 'sekret';
+    mockSession(null);
+
+    const result = await middleware(requestFor('/'));
+
+    expect(result.status).toBe(401);
+    expect(result.headers.get('content-security-policy')).toBeNull();
+  });
+});
+
 describe('site password gate', () => {
   it('does not gate any route when SITE_PASSWORD is unset', async () => {
     const response = mockSession(null);

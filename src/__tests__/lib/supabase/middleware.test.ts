@@ -91,4 +91,32 @@ describe('updateSession', () => {
 
     expect(response).toBeInstanceOf(NextResponse);
   });
+
+  it('forwards extra request headers (the CSP nonce) to the downstream request', async () => {
+    const { response } = await updateSession(requestFor('/'), {
+      'x-nonce': 'abc123',
+    });
+
+    // NextResponse.next({ request: { headers } }) encodes overridden request
+    // headers as `x-middleware-request-*` (+ a list in override-headers) so the
+    // downstream render sees them.
+    expect(response.headers.get('x-middleware-override-headers')).toContain(
+      'x-nonce',
+    );
+    expect(response.headers.get('x-middleware-request-x-nonce')).toBe('abc123');
+  });
+
+  it('still forwards the nonce after a cookie refresh', async () => {
+    cookiesToWrite = [
+      { name: 'sb-access-token', value: 'fresh', options: { path: '/' } },
+    ];
+
+    const { response } = await updateSession(requestFor('/admin'), {
+      'x-nonce': 'abc123',
+    });
+
+    // The response is rebuilt inside setAll; the nonce must survive that rebuild.
+    expect(response.headers.get('x-middleware-request-x-nonce')).toBe('abc123');
+    expect(response.cookies.get('sb-access-token')?.value).toBe('fresh');
+  });
 });

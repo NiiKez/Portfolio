@@ -6,12 +6,14 @@ import type { Database } from '@/types/database';
 /**
  * Cookie-free Supabase client for PUBLIC, read-only data.
  *
- * Unlike `@/lib/supabase/server`, this does NOT call `cookies()`. Reading
- * cookies forces a page into dynamic rendering, which silently disables
- * `export const revalidate` (ISR) and hits Supabase on every request. By
- * using the plain `@supabase/supabase-js` client with no cookie handling,
- * pages that only read public data (e.g. `/`, `/projects`,
- * `/projects/[id]`, `/about`) stay statically generatable / ISR-able.
+ * Unlike `@/lib/supabase/server`, this does NOT call `cookies()`. Public pages
+ * (`/`, `/projects`, `/projects/[id]`, `/about`) read through this plain
+ * `@supabase/supabase-js` client so their queries run on the anon /
+ * `public_read` RLS path and carry NO user session — they never touch the
+ * authenticated server client or its cookie machinery. (Rendering is dynamic
+ * app-wide regardless — see the per-request CSP nonce in `src/middleware.ts`
+ * and `force-dynamic` in the root layout — so this is about the data path and
+ * least privilege, not static/ISR generation.)
  *
  * It carries NO user session, so it must only be used for PUBLIC reads —
  * never for anything that depends on auth or row-level user context.

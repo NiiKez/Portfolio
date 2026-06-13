@@ -40,6 +40,30 @@ describe('markdownToPlainText', () => {
     );
   });
 
+  it('preserves intraword underscores in identifiers (not emphasis)', () => {
+    expect(markdownToPlainText('Use snake_case_names and MAX_SIZE here.')).toBe(
+      'Use snake_case_names and MAX_SIZE here.',
+    );
+  });
+
+  it('strips _emphasis_ that is flanked by non-word characters', () => {
+    expect(markdownToPlainText('A truly _bold_ claim.')).toBe(
+      'A truly bold claim.',
+    );
+  });
+
+  it('keeps a literal > used mid-sentence (only strips blockquote markers)', () => {
+    expect(markdownToPlainText('5 > 3 holds.')).toBe('5 > 3 holds.');
+  });
+
+  it('does not leak a trailing ) from a link URL that contains parens', () => {
+    expect(
+      markdownToPlainText(
+        'See [Wikipedia](https://en.wikipedia.org/wiki/Foo_(bar)) now.',
+      ),
+    ).toBe('See Wikipedia now.');
+  });
+
   it('collapses runs of whitespace and trims the result', () => {
     expect(markdownToPlainText('  hello   \n\n   world  ')).toBe('hello world');
   });

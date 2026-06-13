@@ -2,8 +2,6 @@ import { getProjects } from '@/lib/queries/projects';
 import { ProjectGrid } from '@/components/projects/project-grid';
 import { PageHeader } from '@/components/ui/page-header';
 
-export const revalidate = 3600;
-
 export const metadata = {
   title: 'Projects',
   description: 'A showcase of the projects I have built.',

@@ -229,6 +229,41 @@ describe('setProjectVideo', () => {
     expect(storageRemove).toHaveBeenCalledWith([storagePath]);
   });
 
+  it('rejects and removes the object when it exceeds the size limit', async () => {
+    storageList.mockResolvedValue({
+      data: [
+        {
+          name: filename,
+          metadata: { mimetype: 'video/mp4', size: 100 * 1024 * 1024 + 1 },
+        },
+      ],
+      error: null,
+    });
+
+    const result = await setProjectVideo({ projectId, storagePath });
+
+    expect(result.success).toBe(false);
+    // The oversized upload must be dropped and no row written.
+    expect(storageRemove).toHaveBeenCalledWith([storagePath]);
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it('accepts an object whose size is within the limit', async () => {
+    storageList.mockResolvedValue({
+      data: [
+        {
+          name: filename,
+          metadata: { mimetype: 'video/mp4', size: 100 * 1024 * 1024 },
+        },
+      ],
+      error: null,
+    });
+
+    const result = await setProjectVideo({ projectId, storagePath });
+
+    expect(result.success).toBe(true);
+  });
+
   it('compensates by removing the upload when the row update fails', async () => {
     projectsState.single = {
       data: null,

@@ -8,16 +8,12 @@ import { MarkdownContent } from '@/components/projects/markdown-content';
 import { ProjectGallery } from '@/components/projects/project-gallery';
 import { ProjectVideo } from '@/components/projects/project-video';
 import { markdownToPlainText } from '@/lib/markdown';
-import { getProjectById, getProjects } from '@/lib/queries/projects';
+import { getProjectById } from '@/lib/queries/projects';
 
-export const revalidate = 3600;
-
-// Prebuild a static page per project at build time; new projects added later
-// are rendered on first request and then cached (ISR), per `revalidate` above.
-export async function generateStaticParams() {
-  const projects = await getProjects();
-  return projects.map((project) => ({ id: project.id }));
-}
+// Rendering is dynamic (per-request) so the CSP nonce in the page HTML matches
+// the per-request CSP header — see `export const dynamic` in the root layout.
+// Static generation / ISR (`generateStaticParams` + `revalidate`) was removed
+// for this reason; a cached page would embed a stale, blocked nonce.
 
 type Props = { params: Promise<{ id: string }> };
 

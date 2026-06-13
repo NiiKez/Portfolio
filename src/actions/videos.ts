@@ -23,6 +23,13 @@ function revalidateVideoSurfaces(projectId: string) {
 }
 
 const VIDEO_BUCKET = 'videos';
+// Must match the browser uploader's client-side cap (video-uploader.tsx) and the
+// `videos` bucket's `file_size_limit`. The bucket limit is the authoritative
+// gate — the file streams from the browser straight to storage via a signed URL,
+// bypassing this action — but we re-check the stored object's size here so a
+// missing/misconfigured bucket limit cannot silently wire an oversized object to
+// a row.
+const MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024;
 
 // The demo-video poster is an image, so it lives in the `screenshots` bucket
 // (public read, admin write) alongside the gallery images. It is referenced
@@ -171,11 +178,28 @@ export const setProjectVideo = safeAction<
       throw new Error('Uploaded video could not be found');
     }
 
-    // Defence in depth: the bucket already restricts `allowed_mime_types`, but
-    // reject anything that slipped through as a non-video. Tolerate a missing
-    // mimetype (not all storage backends populate it on `list`).
-    const mimetype = (object.metadata as { mimetype?: string } | null)
-      ?.mimetype;
+    // Defence in depth: the `videos` bucket enforces `file_size_limit` and
+    // `allowed_mime_types` server-side (the real gate, since the signed-URL
+    // upload bypasses this action). Re-check the stored object here so a missing
+    // or misconfigured bucket limit cannot let an oversized or non-video object
+    // be wired to a row. Metadata fields are tolerated as absent — not all
+    // storage backends populate them on `list` — so each check only fires when
+    // the value is present.
+    const metadata = object.metadata as {
+      mimetype?: string;
+      size?: number;
+    } | null;
+
+    const size = metadata?.size;
+    if (typeof size === 'number' && size > MAX_VIDEO_SIZE_BYTES) {
+      await storage
+        .from(VIDEO_BUCKET)
+        .remove([storagePath])
+        .catch(() => undefined);
+      throw new Error('Uploaded video is too large');
+    }
+
+    const mimetype = metadata?.mimetype;
     if (mimetype && !mimetype.startsWith('video/')) {
       await storage
         .from(VIDEO_BUCKET)

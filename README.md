@@ -5,8 +5,9 @@ It pairs a polished, animated public site with a complete, security-hardened **a
 panel** that manages all content — projects, skills, work experience, screenshots, and
 demo videos — without touching code.
 
-The public site is statically rendered with ISR; the admin panel is a server-action CMS
-guarded by magic-link auth, an `ADMIN_EMAIL` gate, and Postgres Row-Level Security.
+The public site is server-rendered (dynamic, with a per-request CSP nonce); the admin
+panel is a server-action CMS guarded by magic-link auth, an `ADMIN_EMAIL` gate, and
+Postgres Row-Level Security.
 
 ---
 
@@ -29,20 +30,20 @@ guarded by magic-link auth, an `ADMIN_EMAIL` gate, and Postgres Row-Level Securi
 
 ## Tech stack
 
-| Area        | Choice                                                                      |
-| ----------- | --------------------------------------------------------------------------- |
-| Framework   | Next.js `16.2.6` (App Router, middleware, server actions, API routes, ISR)  |
-| UI          | React `19.2.4`, TypeScript `5`, Tailwind CSS `4`, `@tailwindcss/typography` |
-| Components  | `@base-ui/react`, `lucide-react` icons, `sonner` toasts, `next-themes`      |
-| Animation   | `motion` (Framer Motion) `12`                                               |
-| Drag & drop | `@dnd-kit/core` + `@dnd-kit/sortable`                                       |
-| Markdown    | `react-markdown` + `remark-gfm`                                             |
-| Backend     | Supabase — `@supabase/supabase-js`, `@supabase/ssr`                         |
-| Validation  | `zod` `4`                                                                   |
-| Logging     | `winston`                                                                   |
-| Testing     | `vitest` `4`, `@testing-library/react`, `msw`, `@vitest/coverage-v8`        |
-| Tooling     | ESLint `9` (flat config), Prettier                                          |
-| Runtime     | Node.js `>= 20`                                                             |
+| Area        | Choice                                                                             |
+| ----------- | ---------------------------------------------------------------------------------- |
+| Framework   | Next.js `16.2.6` (App Router, middleware, server actions, API routes, dynamic SSR) |
+| UI          | React `19.2.4`, TypeScript `5`, Tailwind CSS `4`, `@tailwindcss/typography`        |
+| Components  | `@base-ui/react`, `lucide-react` icons, `sonner` toasts, `next-themes`             |
+| Animation   | `motion` (Framer Motion) `12`                                                      |
+| Drag & drop | `@dnd-kit/core` + `@dnd-kit/sortable`                                              |
+| Markdown    | `react-markdown` + `remark-gfm`                                                    |
+| Backend     | Supabase — `@supabase/supabase-js`, `@supabase/ssr`                                |
+| Validation  | `zod` `4`                                                                          |
+| Logging     | `winston`                                                                          |
+| Testing     | `vitest` `4`, `@testing-library/react`, `msw`, `@vitest/coverage-v8`               |
+| Tooling     | ESLint `9` (flat config), Prettier                                                 |
+| Runtime     | Node.js `>= 20`                                                                    |
 
 ---
 
@@ -53,7 +54,7 @@ src/
 ├── app/                     # App Router routes
 │   ├── page.tsx             # Home (/)
 │   ├── about/               # About hub: bio + experience + tech stack + contact
-│   ├── projects/            # Projects list + [id] detail (generateStaticParams + ISR)
+│   ├── projects/            # Projects list + [id] detail (dynamic SSR)
 │   ├── admin/               # Admin panel (gated by middleware)
 │   ├── api/auth/send-otp/   # Rate-limited magic-link endpoint
 │   ├── auth/                # callback / signout
@@ -130,7 +131,8 @@ npm run dev      # http://localhost:3001  (note: port 3001, not 3000)
 | `npm run test:ci` | Vitest run with coverage                    |
 
 > The app **cannot be statically exported** — it relies on middleware, server actions,
-> API routes, and ISR, so it needs a Node.js server runtime (`next build && next start`).
+> API routes, and per-request dynamic rendering (a fresh CSP nonce per request), so it
+> needs a Node.js server runtime (`next build && next start`).
 
 ---
 
@@ -143,8 +145,9 @@ npm run dev      # http://localhost:3001  (note: port 3001, not 3000)
 | `/projects`      | Filterable project list (filter pills by technology) with a sticky desktop preview pane                 |
 | `/projects/[id]` | Project detail: demo video (with poster), screenshot gallery + lightbox, markdown body, live/repo links |
 
-- **Rendering:** public pages use ISR (`revalidate = 3600`); project detail pages are
-  pre-built via `generateStaticParams()` and revalidate on demand.
+- **Rendering:** public pages are dynamically server-rendered per request
+  (`force-dynamic` in the root layout) so each response carries a fresh CSP nonce;
+  server actions call `revalidatePath()` to bust the data cache on content changes.
 - **Media:** the gallery is a keyboard-accessible carousel with a focus-trapped lightbox;
   the demo video lazy-loads behind a poster image.
 - **SEO:** `getBaseUrl()` (`src/lib/site-url.ts`) drives canonical URLs, the sitemap,

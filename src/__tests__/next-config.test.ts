@@ -11,52 +11,9 @@ async function importConfig(): Promise<NextConfig> {
   return mod.default;
 }
 
-async function getCsp(config: NextConfig): Promise<string> {
-  const headers = await config.headers!();
-  const all = headers[0]!.headers;
-  const csp = all.find((h) => h.key === 'Content-Security-Policy');
-  return csp!.value;
-}
-
-describe('next.config headers - CSP', () => {
-  beforeEach(() => {
-    process.env = { ...ORIGINAL_ENV };
-  });
-
-  afterEach(() => {
-    process.env = { ...ORIGINAL_ENV };
-  });
-
-  it("does not allow 'unsafe-eval' in production", async () => {
-    process.env = { ...process.env, NODE_ENV: 'production' };
-    const config = await importConfig();
-    const csp = await getCsp(config);
-
-    const scriptSrc = csp.split('; ').find((d) => d.startsWith('script-src'));
-    expect(scriptSrc).toBeDefined();
-    expect(scriptSrc).not.toContain('unsafe-eval');
-  });
-
-  it("allows 'unsafe-eval' in development", async () => {
-    process.env = { ...process.env, NODE_ENV: 'development' };
-    const config = await importConfig();
-    const csp = await getCsp(config);
-
-    const scriptSrc = csp.split('; ').find((d) => d.startsWith('script-src'));
-    expect(scriptSrc).toContain("'unsafe-eval'");
-  });
-
-  it('always locks down framing and object/default sources', async () => {
-    process.env = { ...process.env, NODE_ENV: 'production' };
-    const config = await importConfig();
-    const csp = await getCsp(config);
-
-    expect(csp).toContain("frame-ancestors 'none'");
-    expect(csp).toContain("object-src 'none'");
-    expect(csp).toContain("default-src 'self'");
-  });
-});
-
+// NOTE: Content-Security-Policy is no longer set here — it carries a per-request
+// nonce and is built in `src/middleware.ts`. Its coverage lives in
+// `src/__tests__/lib/csp.test.ts` and `src/__tests__/middleware.test.ts`.
 describe('next.config security headers', () => {
   beforeEach(() => {
     process.env = { ...ORIGINAL_ENV };
@@ -66,7 +23,7 @@ describe('next.config security headers', () => {
     process.env = { ...ORIGINAL_ENV };
   });
 
-  it('returns all six security headers with the expected values', async () => {
+  it('returns the request-invariant security headers with the expected values', async () => {
     const config = await importConfig();
     const ruleSets = await config.headers!();
 
@@ -77,7 +34,11 @@ describe('next.config security headers', () => {
       ruleSets[0]!.headers.map((h) => [h.key, h.value]),
     );
 
-    expect(byKey['Content-Security-Policy']).toBeDefined();
+    // CSP is set per-request in the middleware, never here.
+    expect(byKey['Content-Security-Policy']).toBeUndefined();
+    expect(byKey['Strict-Transport-Security']).toBe(
+      'max-age=63072000; includeSubDomains',
+    );
     expect(byKey['X-Content-Type-Options']).toBe('nosniff');
     expect(byKey['X-Frame-Options']).toBe('DENY');
     expect(byKey['X-XSS-Protection']).toBe('1; mode=block');

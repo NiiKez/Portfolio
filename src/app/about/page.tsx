@@ -14,8 +14,6 @@ export const metadata: Metadata = {
     'Who I am, where I have worked, the technologies I use, and how to get in touch.',
 };
 
-export const revalidate = 3600;
-
 export default async function AboutPage() {
   const [skills, experiences] = await Promise.all([
     getSkills(),
