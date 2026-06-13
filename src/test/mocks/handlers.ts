@@ -1,71 +1,20 @@
-import { http, HttpResponse } from 'msw';
-
-const SUPABASE_URL =
-  process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://localhost:54321';
-
-const REST = `${SUPABASE_URL}/rest/v1`;
-const AUTH = `${SUPABASE_URL}/auth/v1`;
-const STORAGE = `${SUPABASE_URL}/storage/v1`;
-
-type Row = Record<string, unknown>;
-
-const tables: Record<string, Row[]> = {
-  skills: [],
-  projects: [],
-  project_screenshots: [],
-  project_technologies: [],
-};
-
-export function resetMockData(seed?: Partial<Record<string, Row[]>>) {
-  for (const key of Object.keys(tables)) {
-    tables[key] = seed?.[key] ? [...(seed[key] as Row[])] : [];
-  }
-}
-
-function getTable(name: string): Row[] {
-  if (!(name in tables)) tables[name] = [];
-  return tables[name]!;
-}
-
-export const handlers = [
-  http.get(`${REST}/:table`, ({ params }) => {
-    const rows = getTable(params.table as string);
-    return HttpResponse.json(rows);
-  }),
-
-  http.post(`${REST}/:table`, async ({ params, request }) => {
-    const body = (await request.json()) as Row | Row[];
-    const incoming = Array.isArray(body) ? body : [body];
-    const rows = getTable(params.table as string);
-    rows.push(...incoming);
-    return HttpResponse.json(incoming, { status: 201 });
-  }),
-
-  http.patch(`${REST}/:table`, async ({ params, request }) => {
-    const body = (await request.json()) as Row;
-    const rows = getTable(params.table as string);
-    const updated = rows.map((row) => ({ ...row, ...body }));
-    tables[params.table as string] = updated;
-    return HttpResponse.json(updated);
-  }),
-
-  http.delete(`${REST}/:table`, ({ params }) => {
-    tables[params.table as string] = [];
-    return HttpResponse.json([]);
-  }),
-
-  http.get(`${AUTH}/user`, () =>
-    HttpResponse.json({
-      id: '00000000-0000-0000-0000-000000000000',
-      email: 'admin@example.com',
-    }),
-  ),
-
-  http.post(`${STORAGE}/object/:bucket/*`, () =>
-    HttpResponse.json({ Key: 'mocked-key' }),
-  ),
-
-  http.delete(`${STORAGE}/object/:bucket/*`, () =>
-    HttpResponse.json({ message: 'deleted' }),
-  ),
-];
+/**
+ * MSW request handlers — intentionally EMPTY.
+ *
+ * Every test mocks Supabase at the module boundary (`vi.mock('@/lib/supabase/*')`
+ * and friends), so no test ever issues a real network request. The MSW server
+ * (see `src/test/setup.ts`) is kept purely as a NETWORK TRIPWIRE: with
+ * `onUnhandledRequest: 'error'`, any accidental real request — e.g. a new test
+ * that forgets to mock the Supabase client — fails loudly instead of silently
+ * hitting the live, shared Supabase project.
+ *
+ * This file previously held hand-rolled PostgREST/auth/storage handlers, but
+ * nothing exercised them and they did not model real PostgREST semantics (e.g.
+ * PATCH/DELETE ignored the `?id=eq.` filter and mutated EVERY row, GET ignored
+ * `select`/`order`). That made them a false-confidence trap: if a test were ever
+ * wired through a real client, broken query code (a dropped `.eq()` filter)
+ * would pass green. If integration-style coverage is wanted later, add
+ * realistic, filter-aware handlers here and drive a REAL Supabase client
+ * through them via `server.use(...)`.
+ */
+export const handlers = [];

@@ -128,6 +128,27 @@ describe('VideoUploader — file selection & validation', () => {
     });
   });
 
+  it('stages a file that is exactly at the 100MB cap (boundary is inclusive)', async () => {
+    // The reject test above uses cap+1; pin the other side of the strict `>`
+    // check so a regression to `>=` (which would reject a valid at-cap video)
+    // fails here.
+    render(<VideoUploader projectId={projectId} initialVideoPath={null} />);
+
+    const input = screen.getByLabelText(FILE_INPUT_LABEL) as HTMLInputElement;
+    fireEvent.change(input, {
+      target: {
+        files: [
+          makeFile('exact.mp4', 'video/mp4', 100 * 1024 * 1024, MP4_BYTES),
+        ],
+      },
+    });
+
+    expect(
+      await screen.findByRole('button', { name: /Upload video/i }),
+    ).toBeEnabled();
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
   it('rejects a file whose bytes are not a real video', async () => {
     render(<VideoUploader projectId={projectId} initialVideoPath={null} />);
 

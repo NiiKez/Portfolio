@@ -9,7 +9,17 @@ vi.mock('@/lib/queries/projects', () => ({
   getProjects: (...args: unknown[]) => getProjectsMock(...args),
 }));
 
-import { generateMetadata } from '@/app/projects/[id]/page';
+// `notFound()` throws a sentinel so we can assert the page reached that branch
+// (mirrors Next.js, where notFound() throws to unwind to the 404 boundary).
+const NOT_FOUND = 'NEXT_NOT_FOUND';
+const notFoundMock = vi.fn(() => {
+  throw new Error(NOT_FOUND);
+});
+vi.mock('next/navigation', () => ({
+  notFound: () => notFoundMock(),
+}));
+
+import ProjectDetailPage, { generateMetadata } from '@/app/projects/[id]/page';
 
 const VALID_ID = '123e4567-e89b-12d3-a456-426614174000';
 
@@ -77,5 +87,41 @@ describe('project detail generateMetadata', () => {
     const meta = await callMetadata(VALID_ID);
 
     expect(meta).toEqual({});
+  });
+
+  it('strips raw HTML out of the description so no tags leak into the snippet', async () => {
+    getProjectByIdMock.mockResolvedValue(
+      makeProject('<script>alert(1)</script> Real summary text.'),
+    );
+
+    const meta = await callMetadata(VALID_ID);
+
+    expect(meta.description).toContain('Real summary text.');
+    // The hardening flows through to the meta description: no angle brackets.
+    expect(meta.description).not.toContain('<');
+    expect(meta.description).not.toContain('>');
+    expect(meta.description).not.toContain('alert(1)');
+  });
+});
+
+describe('ProjectDetailPage notFound branches', () => {
+  it('calls notFound() for a non-UUID id without querying', async () => {
+    await expect(
+      ProjectDetailPage({ params: Promise.resolve({ id: 'not-a-uuid' }) }),
+    ).rejects.toThrow('NEXT_NOT_FOUND');
+
+    expect(notFoundMock).toHaveBeenCalledTimes(1);
+    expect(getProjectByIdMock).not.toHaveBeenCalled();
+  });
+
+  it('calls notFound() when the project is null', async () => {
+    getProjectByIdMock.mockResolvedValue(null);
+
+    await expect(
+      ProjectDetailPage({ params: Promise.resolve({ id: VALID_ID }) }),
+    ).rejects.toThrow('NEXT_NOT_FOUND');
+
+    expect(getProjectByIdMock).toHaveBeenCalledWith(VALID_ID);
+    expect(notFoundMock).toHaveBeenCalledTimes(1);
   });
 });

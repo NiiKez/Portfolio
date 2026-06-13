@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { config } from '@/middleware';
+
 const mockEnv = vi.hoisted(() => ({
   env: {
     NEXT_PUBLIC_SUPABASE_URL: 'http://localhost:54321',
@@ -45,6 +47,25 @@ describe('middleware', () => {
   it('redirects an unauthenticated user away from an admin route to /admin/login', async () => {
     mockSession(null);
 
+    const result = await middleware(
+      requestFor('/admin/projects?next=https://evil.example/steal'),
+    );
+
+    expect(result.status).toBe(307);
+    const location = new URL(result.headers.get('location') as string);
+    expect(location.host).toBe('localhost:3000');
+    expect(location.pathname).toBe('/admin/login');
+    // The original query string is dropped on redirect (middleware sets
+    // `url.search = ''`) so an attacker-supplied `?next=` (or any reflected
+    // param) cannot ride along to the login page. Deleting that line in the
+    // source must fail this test.
+    expect(location.search).toBe('');
+    expect(result.headers.get('location')).not.toContain('evil.example');
+  });
+
+  it('redirects a non-admin user away from an admin route to /admin/login', async () => {
+    mockSession({ email: 'someone@else.com' });
+
     const result = await middleware(requestFor('/admin/projects'));
 
     expect(result.status).toBe(307);
@@ -53,10 +74,35 @@ describe('middleware', () => {
     expect(location.pathname).toBe('/admin/login');
   });
 
-  it('redirects a non-admin user away from an admin route to /admin/login', async () => {
+  it('redirects an unauthenticated user away from the bare /admin route to /admin/login', async () => {
+    mockSession(null);
+
+    const result = await middleware(requestFor('/admin'));
+
+    expect(result.status).toBe(307);
+    const location = new URL(result.headers.get('location') as string);
+    expect(location.host).toBe('localhost:3000');
+    expect(location.pathname).toBe('/admin/login');
+  });
+
+  it('redirects an unauthenticated user away from a deeply nested admin route to /admin/login', async () => {
+    mockSession(null);
+
+    const result = await middleware(requestFor('/admin/projects/123/edit'));
+
+    expect(result.status).toBe(307);
+    const location = new URL(result.headers.get('location') as string);
+    expect(location.host).toBe('localhost:3000');
+    expect(location.pathname).toBe('/admin/login');
+  });
+
+  it('still gates /admin/loginx for a non-admin (login exemption is an exact match, not a prefix)', async () => {
+    // `/admin/loginx` starts with `/admin/login` but is NOT the login route. The
+    // gate uses `pathname === '/admin/login'`, so a loose prefix match here would
+    // wrongly expose any `/admin/login*` path — assert it is still redirected.
     mockSession({ email: 'someone@else.com' });
 
-    const result = await middleware(requestFor('/admin/projects'));
+    const result = await middleware(requestFor('/admin/loginx'));
 
     expect(result.status).toBe(307);
     const location = new URL(result.headers.get('location') as string);
@@ -71,17 +117,28 @@ describe('middleware', () => {
 
     expect(result).toBe(response);
     expect(result.headers.get('location')).toBeNull();
+    // The admin pass-through returns the updateSession response directly; assert
+    // the per-request CSP is still attached to it (admin pages must not ship
+    // without the nonce CSP if the source ever early-returns before setting it).
+    expect(result.headers.get('content-security-policy')).toMatch(
+      /script-src[^;]*'nonce-[A-Za-z0-9+/=]+'/,
+    );
   });
 
   it('redirects an already-authenticated admin away from the login route to /admin', async () => {
     mockSession({ email: 'admin@example.com' });
 
-    const result = await middleware(requestFor('/admin/login'));
+    const result = await middleware(
+      requestFor('/admin/login?next=https://evil.example'),
+    );
 
     expect(result.status).toBe(307);
     const location = new URL(result.headers.get('location') as string);
     expect(location.host).toBe('localhost:3000');
     expect(location.pathname).toBe('/admin');
+    // Same query-strip guard on the login→/admin bounce.
+    expect(location.search).toBe('');
+    expect(result.headers.get('location')).not.toContain('evil.example');
   });
 
   it('lets an unauthenticated user reach the login route', async () => {
@@ -228,5 +285,38 @@ describe('site password gate', () => {
     expect(new URL(result.headers.get('location') as string).pathname).toBe(
       '/admin/login',
     );
+  });
+});
+
+describe('config.matcher', () => {
+  // Next compiles `config.matcher` with path-to-regexp, not the bare RegExp
+  // constructor, so `new RegExp(config.matcher[0])` is only an APPROXIMATION of
+  // the real route filter. Next anchors the compiled matcher to the whole path,
+  // so we anchor with `^…$` to mirror that (an un-anchored `new RegExp` would let
+  // the negative lookahead be skipped at a later offset and wrongly "match"
+  // `/_next/static/...`). It is faithful enough to catch the failure that matters:
+  // a typo in the negative lookahead — which gates whether the middleware (and so
+  // the admin auth check + CSP) runs at all — would flip these expectations.
+  const matcher = new RegExp(`^${config.matcher[0]}$`);
+
+  it('runs the middleware on app routes (so the admin gate, session refresh, and CSP apply)', () => {
+    expect(matcher.test('/admin')).toBe(true);
+    expect(matcher.test('/admin/projects')).toBe(true);
+    expect(matcher.test('/admin/projects/123')).toBe(true);
+    // Every admin section must be matched — an un-gated section would skip the
+    // admin auth check AND the CSP. A typo narrowing the lookahead on one of
+    // these would otherwise pass unnoticed.
+    expect(matcher.test('/admin/experience')).toBe(true);
+    expect(matcher.test('/admin/skills')).toBe(true);
+    expect(matcher.test('/admin/settings')).toBe(true);
+    // `/auth/callback` MUST run the middleware so the session is set and the CSP
+    // nonce is applied to the callback response.
+    expect(matcher.test('/auth/callback')).toBe(true);
+  });
+
+  it('skips the middleware for Next internals and static assets', () => {
+    expect(matcher.test('/_next/static/chunk.js')).toBe(false);
+    expect(matcher.test('/favicon.ico')).toBe(false);
+    expect(matcher.test('/logo.png')).toBe(false);
   });
 });

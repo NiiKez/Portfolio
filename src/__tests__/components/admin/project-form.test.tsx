@@ -118,6 +118,29 @@ describe('ProjectForm (create mode)', () => {
     expect(createProjectMock).not.toHaveBeenCalled();
   });
 
+  it('rejects a javascript: scheme github_url at the form layer and does not submit', async () => {
+    // Defence-in-depth at the user-facing entry point: the URL fields feed an
+    // href, so a `javascript:`/`data:` scheme must be caught by the form's
+    // validation (optionalHttpsUrl) before the action is ever called — not only
+    // by the server schema. Surfaces as aria-invalid with no action call.
+    const user = userEvent.setup();
+    render(<ProjectForm allSkills={allSkills} />);
+
+    await user.type(screen.getByLabelText('Title'), 'My Project');
+    await user.type(screen.getByLabelText('Description'), 'Something');
+    await user.type(
+      screen.getByLabelText(/GitHub URL/i),
+      'javascript:alert(1)',
+    );
+    await user.click(screen.getByRole('button', { name: 'Create project' }));
+
+    expect(screen.getByLabelText(/GitHub URL/i)).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+    expect(createProjectMock).not.toHaveBeenCalled();
+  });
+
   it('shows a validation error for a malformed live_url', async () => {
     const user = userEvent.setup();
     render(<ProjectForm allSkills={allSkills} />);

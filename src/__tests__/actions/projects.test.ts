@@ -312,6 +312,25 @@ describe('updateProject', () => {
     expect(fromMock).not.toHaveBeenCalled();
   });
 
+  it('returns Unauthorized when the caller is not the admin', async () => {
+    authGetUser.mockResolvedValue({
+      data: { user: { id: 'intruder', email: 'someone@else.com' } },
+    });
+
+    const result = await updateProject({
+      id: validUuid1,
+      title: 'Portfolio',
+      description: 'desc',
+      github_url: '',
+      technology_ids: [validUuid2],
+    });
+
+    expect(result).toEqual({ success: false, error: 'Unauthorized' });
+    // The write goes through an RPC and revalidation — both must be skipped.
+    expect(rpcMock).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
   it('dedupes technology_ids so a duplicate skill cannot violate the PK', async () => {
     // A duplicate skill id would otherwise hit project_technologies
     // PK(project_id, skill_id) and roll back the whole atomic RPC.
@@ -374,11 +393,24 @@ describe('updateProject', () => {
 
 describe('deleteProject', () => {
   it('deletes a project and revalidates surfaces', async () => {
+    // Use a single shared projects chain so the `.eq('id', ...)` filter on the
+    // delete is observable — without it the delete would hit EVERY row in real
+    // Postgres, which the per-call fresh chains otherwise cannot catch.
+    const projectsChain = createChain(tables.projects);
+    fromMock.mockImplementation((name: TableName) => {
+      if (name === 'projects') return projectsChain;
+      const state = tables[name] ?? emptyState();
+      tables[name] = state;
+      return createChain(state);
+    });
+
     const result = await deleteProject({ id: validUuid1 });
 
     expect(result).toEqual({ success: true, data: { id: validUuid1 } });
     expect(fromMock).toHaveBeenCalledWith('project_screenshots');
     expect(fromMock).toHaveBeenCalledWith('projects');
+    // The delete must be scoped by id — a dropped WHERE clause would wipe every row.
+    expect(projectsChain.eq).toHaveBeenCalledWith('id', validUuid1);
     expect(storageFrom).not.toHaveBeenCalled();
     expect(revalidatePath).toHaveBeenCalledWith('/projects');
   });
@@ -501,6 +533,18 @@ describe('reorderProjects', () => {
 
     expect(result.success).toBe(false);
     expect(fromMock).not.toHaveBeenCalled();
+  });
+
+  it('returns Unauthorized when the caller is not the admin', async () => {
+    authGetUser.mockResolvedValue({
+      data: { user: { id: 'intruder', email: 'someone@else.com' } },
+    });
+
+    const result = await reorderProjects([{ id: validUuid1, sort_order: 0 }]);
+
+    expect(result).toEqual({ success: false, error: 'Unauthorized' });
+    expect(rpcMock).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it('returns an error when the reorder RPC fails', async () => {

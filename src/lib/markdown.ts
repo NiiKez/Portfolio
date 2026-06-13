@@ -2,7 +2,9 @@
  * Strip Markdown syntax down to a single line of plain text, for previews and
  * excerpts (cards, list rows) where the raw Markdown source would otherwise be
  * shown verbatim. This is intentionally a lightweight regex pass, not a full
- * parser — it removes the common inline/block syntax and collapses whitespace.
+ * parser — it removes the common inline/block syntax, strips any raw HTML tags
+ * (and the contents of `<script>` blocks) so tag markup never leaks into meta
+ * descriptions or card previews, and collapses whitespace.
  *
  * For *rendered* Markdown (the project detail page) use `MarkdownContent`.
  */
@@ -34,6 +36,12 @@ export function markdownToPlainText(md: string): string {
       // List markers (unordered '-', '+', '*' and ordered '1.').
       .replace(/^\s*[-+*]\s+/gm, '')
       .replace(/^\s*\d+\.\s+/gm, '')
+      // Raw HTML: drop <script>…</script> contents entirely, then strip every
+      // remaining tag. `<[^>]*>` only matches a balanced `<…>`, so a literal
+      // mid-sentence '>' (e.g. "5 > 3") is left untouched. Done before the
+      // final collapse so any spacing left by removed tags is squeezed out.
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<[^>]*>/g, '')
       // Collapse runs of whitespace into single spaces.
       .replace(/\s+/g, ' ')
       .trim()

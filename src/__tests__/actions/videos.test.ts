@@ -163,6 +163,22 @@ describe('setProjectVideo', () => {
     expect(storageRemove).toHaveBeenCalledWith([`${projectId}/old.mp4`]);
   });
 
+  it('still succeeds when removing the previous video on replace rejects', async () => {
+    // Cleanup of the previous video is best-effort: a rejected remove must not
+    // fail the action — the new path is already recorded on the row.
+    projectsState.maybeSingle = {
+      data: { demo_video_path: `${projectId}/old.mp4` },
+      error: null,
+    };
+    storageRemove.mockRejectedValue(new Error('storage down'));
+
+    const result = await setProjectVideo({ projectId, storagePath });
+
+    expect(result.success).toBe(true);
+    expect(storageRemove).toHaveBeenCalledWith([`${projectId}/old.mp4`]);
+    expect(revalidatePath).toHaveBeenCalledWith(`/projects/${projectId}`);
+  });
+
   it('rejects a storage path that does not belong to the project', async () => {
     const result = await setProjectVideo({
       projectId,
@@ -172,6 +188,8 @@ describe('setProjectVideo', () => {
     expect(result.success).toBe(false);
     expect(adminStorageFrom).not.toHaveBeenCalled();
     expect(authStorageFrom).not.toHaveBeenCalled();
+    // A schema-rejected input must not reach the projects table either.
+    expect(fromMock).not.toHaveBeenCalled();
   });
 
   it('rejects a path with a non-video extension', async () => {
@@ -183,6 +201,7 @@ describe('setProjectVideo', () => {
     expect(result.success).toBe(false);
     expect(adminStorageFrom).not.toHaveBeenCalled();
     expect(authStorageFrom).not.toHaveBeenCalled();
+    expect(fromMock).not.toHaveBeenCalled();
   });
 
   it('returns Unauthorized when the caller is not the admin', async () => {
@@ -316,12 +335,32 @@ describe('createVideoUploadUrl', () => {
     expect(storageCreateSignedUploadUrl).not.toHaveBeenCalled();
   });
 
-  it('returns Unauthorized when the caller is not the admin', async () => {
+  it('returns Unauthorized when there is no session', async () => {
     authGetUser.mockResolvedValue({ data: { user: null } });
 
     const result = await createVideoUploadUrl({ projectId, ext: 'mp4' });
 
     expect(result).toEqual({ success: false, error: 'Unauthorized' });
+    expect(adminStorageFrom).not.toHaveBeenCalled();
+    expect(storageCreateSignedUploadUrl).not.toHaveBeenCalled();
+  });
+
+  it('returns Unauthorized when a logged-in non-admin calls it', async () => {
+    // createVideoUploadUrl mints a signed write URL to the admin-only `videos`
+    // bucket through the SERVICE-ROLE client, which bypasses storage RLS — so
+    // this app-layer admin gate is the ONLY thing stopping a logged-in non-admin
+    // (e.g. another user on this shared Supabase project) from obtaining a write
+    // capability. Its two sibling service-role actions test this exact case;
+    // pin it here too, on the most capability-granting of the three.
+    authGetUser.mockResolvedValue({
+      data: { user: { id: 'intruder', email: 'someone@else.com' } },
+    });
+
+    const result = await createVideoUploadUrl({ projectId, ext: 'mp4' });
+
+    expect(result).toEqual({ success: false, error: 'Unauthorized' });
+    // The service-role bucket must never be reached for a non-admin caller.
+    expect(adminStorageFrom).not.toHaveBeenCalled();
     expect(storageCreateSignedUploadUrl).not.toHaveBeenCalled();
   });
 
@@ -356,6 +395,22 @@ describe('discardVideoUpload', () => {
     expect(storageRemove).not.toHaveBeenCalled();
   });
 
+  it('returns Unauthorized when the caller is not the admin', async () => {
+    // discardVideoUpload deletes from the admin-only `videos` bucket through the
+    // SERVICE-ROLE client, which bypasses storage RLS — so this app-layer admin
+    // gate is the ONLY thing standing between a non-admin and a delete.
+    authGetUser.mockResolvedValue({
+      data: { user: { id: 'intruder', email: 'someone@else.com' } },
+    });
+
+    const result = await discardVideoUpload({ projectId, storagePath });
+
+    expect(result).toEqual({ success: false, error: 'Unauthorized' });
+    // The service-role bucket must never be reached for a non-admin caller.
+    expect(adminStorageFrom).not.toHaveBeenCalled();
+    expect(storageRemove).not.toHaveBeenCalled();
+  });
+
   it('still succeeds when the storage removal fails', async () => {
     storageRemove.mockResolvedValue({
       data: null,
@@ -379,6 +434,22 @@ describe('removeProjectVideo', () => {
 
     expect(result).toEqual({ success: true, data: { projectId } });
     expect(adminStorageFrom).toHaveBeenCalledWith('videos');
+    expect(storageRemove).toHaveBeenCalledWith([storagePath]);
+    expect(revalidatePath).toHaveBeenCalledWith(`/projects/${projectId}`);
+  });
+
+  it('still succeeds when removing the stored video file rejects', async () => {
+    // The column is nulled first; the storage delete is best-effort, so a
+    // rejected remove must not fail the action.
+    projectsState.maybeSingle = {
+      data: { demo_video_path: storagePath },
+      error: null,
+    };
+    storageRemove.mockRejectedValue(new Error('storage down'));
+
+    const result = await removeProjectVideo({ projectId });
+
+    expect(result.success).toBe(true);
     expect(storageRemove).toHaveBeenCalledWith([storagePath]);
     expect(revalidatePath).toHaveBeenCalledWith(`/projects/${projectId}`);
   });
@@ -685,6 +756,22 @@ describe('removeProjectVideoPoster', () => {
     expect(result).toEqual({ success: true, data: { projectId } });
     expect(authStorageFrom).toHaveBeenCalledWith('screenshots');
     expect(adminStorageFrom).not.toHaveBeenCalled();
+    expect(storageRemove).toHaveBeenCalledWith([posterPath]);
+    expect(revalidatePath).toHaveBeenCalledWith(`/projects/${projectId}`);
+  });
+
+  it('still succeeds when removing the stored poster file rejects', async () => {
+    // The column is nulled first; the storage delete is best-effort, so a
+    // rejected remove must not fail the action.
+    projectsState.maybeSingle = {
+      data: { demo_video_poster_path: posterPath },
+      error: null,
+    };
+    storageRemove.mockRejectedValue(new Error('storage down'));
+
+    const result = await removeProjectVideoPoster({ projectId });
+
+    expect(result.success).toBe(true);
     expect(storageRemove).toHaveBeenCalledWith([posterPath]);
     expect(revalidatePath).toHaveBeenCalledWith(`/projects/${projectId}`);
   });

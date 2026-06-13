@@ -131,6 +131,44 @@ describe('projectSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects a javascript: scheme github_url', () => {
+    const result = projectSchema.safeParse({
+      title: 'Portfolio',
+      description: 'My portfolio site',
+      github_url: 'javascript:alert(1)',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a data: scheme github_url', () => {
+    const result = projectSchema.safeParse({
+      title: 'Portfolio',
+      description: 'My portfolio site',
+      github_url: 'data:text/html,<script>alert(1)</script>',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a non-string (numeric) github_url', () => {
+    const result = projectSchema.safeParse({
+      title: 'Portfolio',
+      description: 'My portfolio site',
+      github_url: 12345,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  // Dedupe so a duplicate skill id can't violate the
+  // project_technologies PK(project_id, skill_id).
+  it('dedupes duplicate technology_ids', () => {
+    const result = projectSchema.parse({
+      title: 'P',
+      description: 'd',
+      technology_ids: [uuid, uuid],
+    });
+    expect(result.technology_ids).toEqual([uuid]);
+  });
+
   it('accepts a valid https live_url', () => {
     const result = projectSchema.parse({
       title: 'Portfolio',
@@ -275,6 +313,84 @@ describe('experienceSchema', () => {
     expect(second.success).toBe(true);
     expect(second.data?.company_url).toBeNull();
     expect(second.data?.location).toBeNull();
+  });
+
+  it('rejects a non-https company_url', () => {
+    const result = experienceSchema.safeParse({
+      ...base,
+      company_url: 'http://insecure.example.com',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an unknown kind', () => {
+    const result = experienceSchema.safeParse({
+      ...base,
+      kind: 'Contractor',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an empty role', () => {
+    const result = experienceSchema.safeParse({ ...base, role: '   ' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an empty company', () => {
+    const result = experienceSchema.safeParse({ ...base, company: '' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an empty period', () => {
+    const result = experienceSchema.safeParse({ ...base, period: '   ' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an empty description', () => {
+    const result = experienceSchema.safeParse({ ...base, description: '' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a description longer than 5000 characters', () => {
+    const result = experienceSchema.safeParse({
+      ...base,
+      description: 'a'.repeat(5001),
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a location longer than 150 characters', () => {
+    const result = experienceSchema.safeParse({
+      ...base,
+      location: 'a'.repeat(151),
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects more than 50 technologies', () => {
+    const result = experienceSchema.safeParse({
+      ...base,
+      technologies: Array.from({ length: 51 }, () => 'tech'),
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a technology item longer than 50 characters', () => {
+    const result = experienceSchema.safeParse({
+      ...base,
+      technologies: ['a'.repeat(51)],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('yields location null when the location key is omitted', () => {
+    const result = experienceSchema.parse(base);
+    expect(result.location).toBeNull();
+  });
+
+  it('defaults technologies to an empty array when omitted', () => {
+    const result = experienceSchema.parse(base);
+    expect(result.technologies).toEqual([]);
   });
 });
 

@@ -27,3 +27,14 @@ export function rateLimit(
   entry.count++;
   return { allowed: true, retryAfter: 0 };
 }
+
+/**
+ * Clears the in-memory counter store. Test-only: the store is module-global and
+ * never expires within a run, so without this a test's counts could bleed into
+ * another that reuses the same key (or runs in a different order between the
+ * parallel local run and the serialized CI run). Production code must not call
+ * this.
+ */
+export function __resetRateLimit(): void {
+  store.clear();
+}

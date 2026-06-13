@@ -159,6 +159,25 @@ describe('ScreenshotUploader — file selection & staging', () => {
     expect(uploadScreenshotMock).not.toHaveBeenCalled();
   });
 
+  it('stages a file that is exactly at the 5MB cap (boundary is inclusive)', async () => {
+    // The reject test above uses cap+1; pin the other side of the strict `>`
+    // check so a regression to `>=` (which would reject a valid at-cap file)
+    // fails here.
+    render(
+      <ScreenshotUploader projectId={projectId} initialScreenshots={[]} />,
+    );
+
+    const input = screen.getByLabelText(FILE_INPUT_LABEL) as HTMLInputElement;
+    fireEvent.change(input, {
+      target: { files: [makeFile('exact.png', 'image/png', 5 * 1024 * 1024)] },
+    });
+
+    expect(toastError).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole('button', { name: /Upload 1 image/i }),
+    ).toBeEnabled();
+  });
+
   it('stages multiple valid files and shows a count + upload button', async () => {
     render(
       <ScreenshotUploader projectId={projectId} initialScreenshots={[]} />,
