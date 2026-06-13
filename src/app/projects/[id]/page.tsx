@@ -7,6 +7,7 @@ import { GitHubIcon } from '@/components/icons/social-icons';
 import { MarkdownContent } from '@/components/projects/markdown-content';
 import { ProjectGallery } from '@/components/projects/project-gallery';
 import { ProjectVideo } from '@/components/projects/project-video';
+import { markdownToPlainText } from '@/lib/markdown';
 import { getProjectById, getProjects } from '@/lib/queries/projects';
 
 export const revalidate = 3600;
@@ -27,7 +28,9 @@ export async function generateMetadata({ params }: Props) {
   if (!project) return {};
   return {
     title: project.title,
-    description: project.description.slice(0, 160),
+    // Strip Markdown so search/social snippets don't show raw `**`/`#`/`](…)`
+    // syntax or get cut mid-token.
+    description: markdownToPlainText(project.description).slice(0, 160),
   };
 }
 

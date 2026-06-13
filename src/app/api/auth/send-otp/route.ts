@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 
+import { getClientIp } from '@/lib/client-ip';
 import { createClient } from '@/lib/supabase/server';
 import { rateLimit } from '@/lib/rate-limit';
 import { getBaseUrl } from '@/lib/site-url';
@@ -26,8 +27,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const ip =
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+  const ip = getClientIp(request);
 
   const perIp = rateLimit(`send-otp:${ip}`, 5, WINDOW_MS);
   if (!perIp.allowed) {
