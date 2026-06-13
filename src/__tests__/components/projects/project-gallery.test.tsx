@@ -143,6 +143,36 @@ describe('ProjectGallery', () => {
     expect(screen.getByText('3 / 3')).toBeInTheDocument();
   });
 
+  it('mounts every screenshot up-front so switching never refetches', () => {
+    render(
+      <ProjectGallery
+        screenshots={[makeShot('a'), makeShot('b'), makeShot('c')]}
+        projectTitle="Portfolio"
+      />,
+    );
+
+    // All three screenshots are in the DOM simultaneously (stacked), not just
+    // the active one. This is what makes navigation an instant opacity toggle
+    // rather than a per-click remount + storage fetch ("I click, nothing
+    // happens, then it eventually switches").
+    expect(screen.getByAltText('Portfolio screenshot 1')).toBeInTheDocument();
+    expect(screen.getByAltText('Portfolio screenshot 2')).toBeInTheDocument();
+    expect(screen.getByAltText('Portfolio screenshot 3')).toBeInTheDocument();
+
+    // Only the active screenshot is exposed; the rest are hidden from a11y.
+    expect(
+      screen.getByAltText('Portfolio screenshot 1'),
+    ).not.toHaveAttribute('aria-hidden');
+    expect(screen.getByAltText('Portfolio screenshot 2')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    );
+    expect(screen.getByAltText('Portfolio screenshot 3')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    );
+  });
+
   it('jumps to a screenshot when its thumbnail is clicked', async () => {
     const user = userEvent.setup();
     render(
