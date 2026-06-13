@@ -154,7 +154,7 @@ describe('POST /api/auth/send-otp', () => {
     expect(await res.json()).toEqual({ error: 'Failed to send sign-in link.' });
   });
 
-  it('keys the rate limit on the first x-forwarded-for IP', async () => {
+  it('keys the rate limit on the trusted (rightmost) x-forwarded-for IP, not the spoofable leftmost one', async () => {
     await POST(
       makeRequest(JSON.stringify({ email: 'admin@example.com' }), {
         'x-forwarded-for': '9.9.9.9, 10.0.0.1',
@@ -162,7 +162,22 @@ describe('POST /api/auth/send-otp', () => {
     );
 
     expect(rateLimitMock).toHaveBeenCalledWith(
-      'send-otp:9.9.9.9',
+      'send-otp:10.0.0.1',
+      5,
+      15 * 60 * 1000,
+    );
+  });
+
+  it('prefers x-real-ip over x-forwarded-for for the rate-limit key', async () => {
+    await POST(
+      makeRequest(JSON.stringify({ email: 'admin@example.com' }), {
+        'x-real-ip': '203.0.113.7',
+        'x-forwarded-for': '9.9.9.9, 10.0.0.1',
+      }),
+    );
+
+    expect(rateLimitMock).toHaveBeenCalledWith(
+      'send-otp:203.0.113.7',
       5,
       15 * 60 * 1000,
     );

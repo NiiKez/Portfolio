@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { Code2, Menu, X } from 'lucide-react';
 
+import { ThemeToggle } from '@/components/theme-toggle';
 import { profile } from '@/lib/profile';
 
 const NAV_LINKS = [
@@ -35,38 +36,48 @@ export function Header() {
           </span>
         </Link>
 
-        {/* Desktop nav */}
-        <nav className="hidden items-center gap-8 md:flex" aria-label="Main">
-          {NAV_LINKS.map(({ href, label }) => {
-            const active =
-              href === '/' ? pathname === '/' : pathname.startsWith(href);
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={`transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm ${
-                  active
-                    ? 'text-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                style={{ fontSize: '0.9rem' }}
-              >
-                {label}
-              </Link>
-            );
-          })}
-        </nav>
+        {/* Right cluster: desktop nav + theme toggle, or toggle + hamburger on mobile */}
+        <div className="flex items-center gap-2 md:gap-6">
+          {/* Desktop nav */}
+          <nav className="hidden items-center gap-8 md:flex" aria-label="Main">
+            {NAV_LINKS.map(({ href, label }) => {
+              const active =
+                href === '/' ? pathname === '/' : pathname.startsWith(href);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={`transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm ${
+                    active
+                      ? 'text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  style={{ fontSize: '0.9rem' }}
+                >
+                  {label}
+                </Link>
+              );
+            })}
+          </nav>
 
-        {/* Mobile: hamburger */}
-        <button
-          type="button"
-          className="inline-flex size-9 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground md:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label={menuOpen ? 'Close menu' : 'Open menu'}
-          aria-expanded={menuOpen}
-          onClick={() => setMenuOpen((prev) => !prev)}
-        >
-          {menuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-        </button>
+          {/* Theme toggle — visible at every breakpoint */}
+          <ThemeToggle />
+
+          {/* Mobile: hamburger */}
+          <button
+            type="button"
+            className="inline-flex size-9 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground md:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((prev) => !prev)}
+          >
+            {menuOpen ? (
+              <X className="h-6 w-6" />
+            ) : (
+              <Menu className="h-6 w-6" />
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Mobile nav */}

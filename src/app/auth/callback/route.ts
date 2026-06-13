@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
+import { getClientIp } from '@/lib/client-ip';
 import { env } from '@/lib/env';
 import { rateLimit } from '@/lib/rate-limit';
 import { createClient } from '@/lib/supabase/server';
@@ -8,8 +9,7 @@ export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
 
-  const ip =
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+  const ip = getClientIp(request);
   const { allowed } = rateLimit(`auth-callback:${ip}`, 10, 15 * 60 * 1000);
   if (!allowed) {
     return NextResponse.redirect(`${origin}/admin/login?error=rate_limited`);
