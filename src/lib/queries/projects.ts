@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { cache } from 'react';
 import type { QueryData } from '@supabase/supabase-js';
 
 import { createPublicClient } from '@/lib/supabase/public';
@@ -43,7 +44,12 @@ function mapRow(row: ProjectRow): ProjectWithDetails {
   };
 }
 
-export async function getProjects(): Promise<ProjectWithDetails[]> {
+// Wrapped in React's request-scoped `cache()` so repeat calls within a single
+// request are deduped to one DB round-trip — e.g. a route's `generateMetadata`
+// and its page component both load the same project. This memoizes only within
+// a request, so it stays compatible with the per-request nonce CSP / force-dynamic
+// model (it does NOT cache across requests like ISR would).
+export const getProjects = cache(async (): Promise<ProjectWithDetails[]> => {
   const supabase = createPublicClient();
 
   const { data, error } = await projectDetailQuery(supabase)
@@ -52,18 +58,18 @@ export async function getProjects(): Promise<ProjectWithDetails[]> {
 
   if (error) throw error;
   return (data ?? []).map(mapRow);
-}
+});
 
-export async function getProjectById(
-  id: string,
-): Promise<ProjectWithDetails | null> {
-  const supabase = createPublicClient();
+export const getProjectById = cache(
+  async (id: string): Promise<ProjectWithDetails | null> => {
+    const supabase = createPublicClient();
 
-  const { data, error } = await projectDetailQuery(supabase)
-    .eq('id', id)
-    .maybeSingle();
+    const { data, error } = await projectDetailQuery(supabase)
+      .eq('id', id)
+      .maybeSingle();
 
-  if (error) throw error;
-  if (!data) return null;
-  return mapRow(data);
-}
+    if (error) throw error;
+    if (!data) return null;
+    return mapRow(data);
+  },
+);

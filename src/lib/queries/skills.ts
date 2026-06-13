@@ -1,9 +1,12 @@
 import 'server-only';
 
+import { cache } from 'react';
+
 import { createPublicClient } from '@/lib/supabase/public';
 import type { Skill } from '@/types';
 
-export async function getSkills(): Promise<Skill[]> {
+// Request-scoped memoization — see the note in `queries/projects.ts`.
+export const getSkills = cache(async (): Promise<Skill[]> => {
   const supabase = createPublicClient();
 
   const { data, error } = await supabase
@@ -14,4 +17,4 @@ export async function getSkills(): Promise<Skill[]> {
 
   if (error) throw error;
   return (data ?? []) as Skill[];
-}
+});
