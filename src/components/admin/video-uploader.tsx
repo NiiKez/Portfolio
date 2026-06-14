@@ -235,9 +235,17 @@ export function VideoUploader({
         // through the admin-gated action. The signed token is one-time and the
         // object is now gone, so clear the stale staged file — a retry must
         // start from a fresh pick rather than re-using the consumed ticket.
-        await discardVideoUpload({ projectId, storagePath });
+        const discard = await discardVideoUpload({ projectId, storagePath });
         clearStaged();
         toast.error(response.error);
+        // The compensating cleanup is best-effort; if it could not remove the
+        // orphaned object, tell the admin so it can be cleared manually rather
+        // than silently leaving it (and its storage quota) behind.
+        if (!discard.success || !discard.data.discarded) {
+          toast.warning(
+            'The uploaded file was saved to storage but could not be linked or removed — it may need manual cleanup.',
+          );
+        }
         return;
       }
 

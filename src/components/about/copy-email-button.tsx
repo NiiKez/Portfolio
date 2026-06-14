@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Check, Copy } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 
@@ -11,13 +11,24 @@ type CopyEmailButtonProps = {
 export function CopyEmailButton({ email }: CopyEmailButtonProps) {
   const [copied, setCopied] = useState(false);
   const shouldReduce = useReducedMotion();
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear any pending reset on unmount so the timer can't fire setState on an
+  // unmounted component.
+  useEffect(() => {
+    return () => {
+      if (resetTimer.current) clearTimeout(resetTimer.current);
+    };
+  }, []);
 
   async function handleCopy(e: React.MouseEvent<HTMLButtonElement>) {
     e.preventDefault();
     e.stopPropagation();
     await navigator.clipboard.writeText(email);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2200);
+    // Clear a prior timer so rapid re-clicks don't leave a stale reset queued.
+    if (resetTimer.current) clearTimeout(resetTimer.current);
+    resetTimer.current = setTimeout(() => setCopied(false), 2200);
   }
 
   return (

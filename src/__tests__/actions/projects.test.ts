@@ -26,8 +26,15 @@ vi.mock('@/lib/logger', () => ({
 const authGetUser = vi.fn();
 const fromMock = vi.fn();
 const rpcMock = vi.fn();
+// SECURITY CONTRACT: the admin-only `videos` bucket must be cleaned up through
+// the service-role client (createAdminClient) — mirroring `removeProjectVideo`
+// in actions/videos.ts — while the `screenshots` bucket goes through the
+// authenticated client (createClient). Two *distinct* `from` spies let a test
+// prove that routing so a regression swapping the clients fails loudly.
 const storageRemove = vi.fn();
 const storageFrom = vi.fn(() => ({ remove: storageRemove }));
+const adminStorageRemove = vi.fn();
+const adminStorageFrom = vi.fn(() => ({ remove: adminStorageRemove }));
 
 vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(async () => ({
@@ -35,6 +42,12 @@ vi.mock('@/lib/supabase/server', () => ({
     from: fromMock,
     rpc: rpcMock,
     storage: { from: storageFrom },
+  })),
+}));
+
+vi.mock('@/lib/supabase/admin', () => ({
+  createAdminClient: vi.fn(() => ({
+    storage: { from: adminStorageFrom },
   })),
 }));
 
@@ -107,6 +120,7 @@ beforeEach(() => {
     data: { user: { id: 'admin-uid', email: 'admin@example.com' } },
   });
   storageRemove.mockResolvedValue({ data: null, error: null });
+  adminStorageRemove.mockResolvedValue({ data: null, error: null });
 });
 
 const validUuid1 = '11111111-1111-4111-8111-111111111111';
@@ -434,7 +448,7 @@ describe('deleteProject', () => {
     ]);
   });
 
-  it('removes the demo video from the videos bucket when the project has one', async () => {
+  it('removes the demo video from the videos bucket via the service-role client', async () => {
     tables.projects.maybeSingle = {
       data: { demo_video_path: `${validUuid1}/demo.mp4` },
       error: null,
@@ -443,8 +457,32 @@ describe('deleteProject', () => {
     const result = await deleteProject({ id: validUuid1 });
 
     expect(result.success).toBe(true);
-    expect(storageFrom).toHaveBeenCalledWith('videos');
-    expect(storageRemove).toHaveBeenCalledWith([`${validUuid1}/demo.mp4`]);
+    // SECURITY CONTRACT: the videos bucket delete must go through the
+    // service-role client, NOT the authenticated client — otherwise an RLS
+    // denial would silently orphan the demo video.
+    expect(adminStorageFrom).toHaveBeenCalledWith('videos');
+    expect(adminStorageRemove).toHaveBeenCalledWith([`${validUuid1}/demo.mp4`]);
+    // The authenticated client must never touch the videos bucket here.
+    expect(storageFrom).not.toHaveBeenCalledWith('videos');
+  });
+
+  it('removes the poster from the screenshots bucket via the authenticated client', async () => {
+    tables.projects.maybeSingle = {
+      data: {
+        demo_video_path: null,
+        demo_video_poster_path: `${validUuid1}/poster.jpg`,
+      },
+      error: null,
+    };
+
+    const result = await deleteProject({ id: validUuid1 });
+
+    expect(result.success).toBe(true);
+    // The poster lives in the screenshots bucket, which the authenticated
+    // client can write to — it must NOT go through the service-role client.
+    expect(storageFrom).toHaveBeenCalledWith('screenshots');
+    expect(storageRemove).toHaveBeenCalledWith([`${validUuid1}/poster.jpg`]);
+    expect(adminStorageFrom).not.toHaveBeenCalled();
   });
 
   it('rejects a non-uuid id without touching the database', async () => {

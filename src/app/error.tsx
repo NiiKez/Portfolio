@@ -12,7 +12,12 @@ export default function RootError({
   unstable_retry: () => void;
 }) {
   useEffect(() => {
-    console.error(error);
+    // Next.js strips server error details to a `digest` in production; only log
+    // the full error (incl. client-side render errors) in development so it is
+    // not surfaced in end users' consoles.
+    if (process.env.NODE_ENV !== 'production') {
+      console.error(error);
+    }
   }, [error]);
 
   return (

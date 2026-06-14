@@ -16,10 +16,12 @@ const MOCK_SUPABASE_URL = 'http://mocked-supabase.test';
 
 const toastSuccess = vi.fn();
 const toastError = vi.fn();
+const toastWarning = vi.fn();
 vi.mock('sonner', () => ({
   toast: {
     success: (...args: unknown[]) => toastSuccess(...args),
     error: (...args: unknown[]) => toastError(...args),
+    warning: (...args: unknown[]) => toastWarning(...args),
   },
 }));
 
@@ -321,6 +323,48 @@ describe('VideoUploader — uploading', () => {
       projectId,
       storagePath: savedPath,
     });
+    // The discard succeeded, so the admin only sees the primary error — no
+    // manual-cleanup warning.
+    expect(toastWarning).not.toHaveBeenCalled();
+  });
+
+  it('warns the admin when the orphaned upload could not be cleaned up', async () => {
+    const savedPath = `${projectId}/orphan.mp4`;
+    createVideoUploadUrlMock.mockResolvedValue({
+      success: true,
+      data: { path: savedPath, token: 'signed-token' },
+    });
+    setProjectVideoMock.mockResolvedValue({
+      success: false,
+      error: 'could not save',
+    });
+    // The compensating cleanup runs but reports it could not remove the object.
+    discardVideoUploadMock.mockResolvedValue({
+      success: true,
+      data: { discarded: false },
+    });
+    const user = userEvent.setup();
+    render(<VideoUploader projectId={projectId} initialVideoPath={null} />);
+
+    const input = screen.getByLabelText(FILE_INPUT_LABEL) as HTMLInputElement;
+    fireEvent.change(input, {
+      target: { files: [makeFile('demo.mp4', 'video/mp4', 2048, MP4_BYTES)] },
+    });
+    await user.click(
+      await screen.findByRole('button', { name: /Upload video/i }),
+    );
+
+    await waitFor(() => {
+      expect(toastError).toHaveBeenCalledWith('could not save');
+    });
+    // The orphan is surfaced so it can be cleaned up manually rather than left
+    // silently consuming storage quota.
+    await waitFor(() => {
+      expect(toastWarning).toHaveBeenCalledWith(
+        expect.stringMatching(/manual/i),
+      );
+    });
+    expect(toastSuccess).not.toHaveBeenCalled();
   });
 
   it('surfaces a generic error and resets when the upload flow throws', async () => {

@@ -8,6 +8,7 @@ import { PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { deleteProject, reorderProjects } from '@/actions/projects';
 import { SortableList } from '@/components/admin/sortable-list';
 import { Button } from '@/components/ui/button';
+import { markdownToPlainText } from '@/lib/markdown';
 import {
   Dialog,
   DialogClose,
@@ -18,17 +19,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import type { ProjectWithDetails } from '@/types';
-
-/** Strip markdown syntax for a plain-text preview excerpt. */
-function stripMarkdown(text: string): string {
-  return text
-    .replace(/!\[.*?\]\(.*?\)/g, '')
-    .replace(/\[([^\]]+)\]\(.*?\)/g, '$1')
-    .replace(/#{1,6}\s+/g, '')
-    .replace(/[*_`~]/g, '')
-    .replace(/\n+/g, ' ')
-    .trim();
-}
 
 type ProjectListProps = {
   initialProjects: ProjectWithDetails[];
@@ -107,7 +97,10 @@ export function ProjectList({ initialProjects }: ProjectListProps) {
             items={projects}
             onReorder={handleReorder}
             renderItem={(project, dragHandle, rowProps) => {
-              const excerpt = stripMarkdown(project.description).slice(0, 140);
+              const excerpt = markdownToPlainText(project.description).slice(
+                0,
+                140,
+              );
               return (
                 <div
                   ref={rowProps.ref as React.RefCallback<HTMLDivElement>}

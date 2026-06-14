@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { logger } from '@/lib/logger';
 import { safeAction } from '@/lib/safe-action';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import {
   projectSchema,
@@ -174,9 +175,13 @@ export const deleteProject = safeAction<DeleteProjectInput, { id: string }>({
     }
 
     if (videoPath) {
-      // Best-effort: a storage failure must not fail the action.
-      await supabase.storage
-        .from('videos')
+      // Best-effort: a storage failure must not fail the action. The `videos`
+      // bucket is deleted through the service-role client — mirroring
+      // `removeProjectVideo` in actions/videos.ts — so the cleanup does not
+      // depend on the authenticated client passing the bucket's RLS, which
+      // would otherwise risk silently orphaning the object.
+      await createAdminClient()
+        .storage.from('videos')
         .remove([videoPath])
         .catch(() => undefined);
     }
