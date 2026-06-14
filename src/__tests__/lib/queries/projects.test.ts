@@ -135,6 +135,54 @@ describe('getProjects', () => {
     expect(result[0]!.technologies).toEqual([]);
   });
 
+  it('sorts technologies by skill sort_order (then name), regardless of embed order', async () => {
+    const skillZebra = { ...skillA, id: 's-z', name: 'Zebra', sort_order: 2 };
+    const skillAlpha = { ...skillA, id: 's-a', name: 'Alpha', sort_order: 0 };
+    const skillMid = { ...skillA, id: 's-m', name: 'Mid', sort_order: 1 };
+    const rows = [
+      {
+        ...baseProjectRow,
+        screenshots: [],
+        // Embedded relation comes back in arbitrary order — PostgREST gives no
+        // guarantee without an explicit order, so mapRow must sort it.
+        project_technologies: [
+          { skills: skillZebra },
+          { skills: skillMid },
+          { skills: skillAlpha },
+        ],
+      },
+    ];
+    fromMock.mockReturnValue(createListChain({ data: rows, error: null }));
+
+    const result = await getProjects();
+
+    expect(result[0]!.technologies.map((t) => t.id)).toEqual([
+      's-a',
+      's-m',
+      's-z',
+    ]);
+  });
+
+  it('breaks sort_order ties by skill name', async () => {
+    const skillB = { ...skillA, id: 's-b', name: 'Beta', sort_order: 5 };
+    const skillC = { ...skillA, id: 's-c', name: 'Alpha', sort_order: 5 };
+    const rows = [
+      {
+        ...baseProjectRow,
+        screenshots: [],
+        project_technologies: [{ skills: skillB }, { skills: skillC }],
+      },
+    ];
+    fromMock.mockReturnValue(createListChain({ data: rows, error: null }));
+
+    const result = await getProjects();
+
+    expect(result[0]!.technologies.map((t) => t.name)).toEqual([
+      'Alpha',
+      'Beta',
+    ]);
+  });
+
   it('filters out null skills inside project_technologies', async () => {
     const rows = [
       {

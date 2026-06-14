@@ -94,7 +94,7 @@ export function HomeHero() {
         <a
           href={profile.github}
           target="_blank"
-          rel="noreferrer"
+          rel="noopener noreferrer"
           aria-label="GitHub"
           className="transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
         >
@@ -103,7 +103,7 @@ export function HomeHero() {
         <a
           href={profile.linkedin}
           target="_blank"
-          rel="noreferrer"
+          rel="noopener noreferrer"
           aria-label="LinkedIn"
           className="transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
         >

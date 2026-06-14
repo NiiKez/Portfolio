@@ -55,6 +55,9 @@ export function ProjectForm({ project, allSkills }: ProjectFormProps) {
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // Guard against a fast double-submit firing two writes before the pending
+    // state disables the button (it only flips after the transition re-renders).
+    if (isPending) return;
     setErrors({});
 
     const parsed = projectSchema.safeParse({

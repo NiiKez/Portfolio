@@ -112,7 +112,7 @@ export function FeaturedProjects({ projects }: FeaturedProjectsProps) {
                       <a
                         href={p.live_url}
                         target="_blank"
-                        rel="noreferrer"
+                        rel="noopener noreferrer"
                         className="flex items-center gap-1.5 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
                         style={{ fontSize: '0.8rem' }}
                       >
@@ -123,7 +123,7 @@ export function FeaturedProjects({ projects }: FeaturedProjectsProps) {
                       <a
                         href={p.github_url}
                         target="_blank"
-                        rel="noreferrer"
+                        rel="noopener noreferrer"
                         className="flex items-center gap-1.5 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
                         style={{ fontSize: '0.8rem' }}
                       >

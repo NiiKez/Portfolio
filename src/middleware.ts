@@ -38,9 +38,6 @@ function siteGate(request: NextRequest): NextResponse | null {
 }
 
 export async function middleware(request: NextRequest) {
-  const blocked = siteGate(request);
-  if (blocked) return blocked;
-
   // Per-request CSP nonce. It is injected into the forwarded request headers so
   // Next.js stamps it onto its own inline bootstrap scripts (and so the root
   // layout can read it for next-themes via `x-nonce`), and set on the response
@@ -48,8 +45,16 @@ export async function middleware(request: NextRequest) {
   // CSP cannot live in the static `next.config.ts` header set, and pages must
   // render dynamically (see `export const dynamic` in the root layout) — a
   // cached page would carry a stale nonce that no longer matches the header.
+  // Built up-front so every response below — pass-through, 401, or redirect —
+  // carries the CSP, not just the pass-through one.
   const nonce = generateNonce();
   const csp = buildCsp(nonce);
+
+  const blocked = siteGate(request);
+  if (blocked) {
+    blocked.headers.set('Content-Security-Policy', csp);
+    return blocked;
+  }
 
   const { response, user } = await updateSession(request, {
     'x-nonce': nonce,
@@ -67,14 +72,18 @@ export async function middleware(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = '/admin/login';
     url.search = '';
-    return NextResponse.redirect(url);
+    const redirect = NextResponse.redirect(url);
+    redirect.headers.set('Content-Security-Policy', csp);
+    return redirect;
   }
 
   if (isLoginRoute && isAdmin) {
     const url = request.nextUrl.clone();
     url.pathname = '/admin';
     url.search = '';
-    return NextResponse.redirect(url);
+    const redirect = NextResponse.redirect(url);
+    redirect.headers.set('Content-Security-Policy', csp);
+    return redirect;
   }
 
   return response;

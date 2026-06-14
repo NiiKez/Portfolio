@@ -44,8 +44,34 @@ describe('next.config security headers', () => {
     expect(byKey['X-XSS-Protection']).toBe('1; mode=block');
     expect(byKey['Referrer-Policy']).toBe('strict-origin-when-cross-origin');
     expect(byKey['Permissions-Policy']).toBe(
-      'camera=(), microphone=(), geolocation=()',
+      'camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=(), interest-cohort=(), browsing-topics=()',
     );
+  });
+
+  it('denies the high-risk powerful features in Permissions-Policy', async () => {
+    const config = await importConfig();
+    const ruleSets = await config.headers!();
+    const byKey = Object.fromEntries(
+      ruleSets[0]!.headers.map((h) => [h.key, h.value]),
+    );
+    const policy = byKey['Permissions-Policy']!;
+
+    // Deny-by-default for features the site never uses — a regression that drops
+    // any of these (re-opening payment/usb/serial/bluetooth or the Topics API to
+    // injected scripts) must fail here.
+    for (const feature of [
+      'camera',
+      'microphone',
+      'geolocation',
+      'payment',
+      'usb',
+      'serial',
+      'bluetooth',
+      'interest-cohort',
+      'browsing-topics',
+    ]) {
+      expect(policy).toContain(`${feature}=()`);
+    }
   });
 });
 

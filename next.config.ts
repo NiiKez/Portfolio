@@ -18,8 +18,13 @@ const securityHeaders = [
   { key: 'X-XSS-Protection', value: '1; mode=block' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   {
+    // Deny-by-default for powerful features the site never uses. Beyond
+    // camera/mic/geolocation, this also disables payment, USB/serial/Bluetooth,
+    // and the Topics API (interest-cohort/browsing-topics) so an injected or
+    // third-party script cannot reach them.
     key: 'Permissions-Policy',
-    value: 'camera=(), microphone=(), geolocation=()',
+    value:
+      'camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=(), interest-cohort=(), browsing-topics=()',
   },
 ];
 

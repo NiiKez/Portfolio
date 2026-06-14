@@ -26,7 +26,13 @@ function mapRow(row: ProjectRow): ProjectWithDetails {
 
   const technologies = (row.project_technologies ?? [])
     .map((pt) => pt.skills)
-    .filter((s): s is Skill => s !== null);
+    .filter((s): s is Skill => s !== null)
+    // PostgREST does not guarantee order for an embedded relation without an
+    // explicit order, so sort here (mirroring the screenshots handling above)
+    // to keep tech tags stable across requests and avoid hydration flicker.
+    .sort(
+      (a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name),
+    );
 
   return {
     id: row.id,

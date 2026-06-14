@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -155,6 +155,28 @@ describe('ExperienceForm (create mode)', () => {
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
     expect(onCancel).toHaveBeenCalled();
+  });
+
+  it('ignores a re-submit while the first create is still pending (no duplicate row)', async () => {
+    createExperienceMock.mockReturnValue(new Promise(() => {}));
+    const user = userEvent.setup();
+    const { container } = render(
+      <ExperienceForm onSuccess={vi.fn()} onCancel={vi.fn()} />,
+    );
+
+    await user.type(screen.getByLabelText('Role'), 'Engineer');
+    await user.type(screen.getByLabelText('Company'), 'Acme Corp');
+    await user.type(screen.getByLabelText('Period'), 'Summer 2024');
+    await user.type(screen.getByLabelText('Description'), 'Did the work.');
+    await user.click(screen.getByRole('button', { name: 'Create experience' }));
+
+    await screen.findByRole('button', { name: 'Creating…' });
+
+    const form = container.querySelector('form')!;
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+
+    expect(createExperienceMock).toHaveBeenCalledTimes(1);
   });
 
   it('submits the kind chosen via the Select instead of the default', async () => {

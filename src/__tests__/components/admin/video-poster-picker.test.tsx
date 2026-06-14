@@ -540,6 +540,50 @@ describe('VideoPosterPicker — capturing a frame', () => {
     );
   });
 
+  it('rejects a captured frame larger than 5MB without uploading', async () => {
+    // A frame captured from a high-resolution video can exceed the 5MB cap; the
+    // capture path must guard it client-side (mirroring the file-pick path) so
+    // the server never rejects a capture the admin never explicitly chose.
+    HTMLCanvasElement.prototype.getContext = vi.fn(() => ({
+      drawImage: vi.fn(),
+    })) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.toBlob = vi.fn((cb: BlobCallback) =>
+      cb(
+        new Blob([new Uint8Array(5 * 1024 * 1024 + 1)], { type: 'image/jpeg' }),
+      ),
+    ) as unknown as typeof HTMLCanvasElement.prototype.toBlob;
+
+    const user = userEvent.setup();
+    render(
+      <VideoPosterPicker
+        projectId={projectId}
+        videoPath={videoPath}
+        initialPosterPath={null}
+      />,
+    );
+
+    const video = document.querySelector('video') as HTMLVideoElement;
+    Object.defineProperty(video, 'videoWidth', {
+      value: 3840,
+      configurable: true,
+    });
+    Object.defineProperty(video, 'videoHeight', {
+      value: 2160,
+      configurable: true,
+    });
+
+    await user.click(
+      screen.getByRole('button', { name: /Use current frame/i }),
+    );
+
+    await waitFor(() => {
+      expect(toastError).toHaveBeenCalledWith(
+        expect.stringMatching(/larger than 5MB/i),
+      );
+    });
+    expect(setProjectVideoPosterMock).not.toHaveBeenCalled();
+  });
+
   it('toasts when the canvas 2d context is unavailable', async () => {
     HTMLCanvasElement.prototype.getContext = vi.fn(
       () => null,

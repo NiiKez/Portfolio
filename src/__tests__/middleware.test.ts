@@ -205,14 +205,40 @@ describe('CSP nonce', () => {
     );
   });
 
-  it('does not set a CSP on the site-password 401 challenge', async () => {
+  it('sets the nonce CSP on the site-password 401 challenge', async () => {
     mockEnv.env.SITE_PASSWORD = 'sekret';
     mockSession(null);
 
     const result = await middleware(requestFor('/'));
 
     expect(result.status).toBe(401);
-    expect(result.headers.get('content-security-policy')).toBeNull();
+    // Every response — including the early-return 401 — must carry the CSP so a
+    // future change that gives the gate an HTML body cannot ship it unprotected.
+    expect(result.headers.get('content-security-policy')).toMatch(
+      /script-src[^;]*'nonce-[A-Za-z0-9+/=]+'/,
+    );
+  });
+
+  it('sets the nonce CSP on the admin→login redirect response', async () => {
+    mockSession(null);
+
+    const result = await middleware(requestFor('/admin/projects'));
+
+    expect(result.status).toBe(307);
+    expect(result.headers.get('content-security-policy')).toMatch(
+      /script-src[^;]*'nonce-[A-Za-z0-9+/=]+'/,
+    );
+  });
+
+  it('sets the nonce CSP on the login→/admin redirect response', async () => {
+    mockSession({ email: 'admin@example.com' });
+
+    const result = await middleware(requestFor('/admin/login'));
+
+    expect(result.status).toBe(307);
+    expect(result.headers.get('content-security-policy')).toMatch(
+      /script-src[^;]*'nonce-[A-Za-z0-9+/=]+'/,
+    );
   });
 });
 

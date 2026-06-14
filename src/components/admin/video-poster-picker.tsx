@@ -165,6 +165,15 @@ export function VideoPosterPicker({
       }
 
       const file = new File([blob], 'poster.jpg', { type: 'image/jpeg' });
+      // A frame captured from a high-resolution (e.g. 4K) video can exceed the
+      // 5MB cap. Guard here — same check the file-pick path uses — so the server
+      // never rejects a capture the admin never explicitly chose.
+      if (file.size > MAX_FILE_SIZE_BYTES) {
+        toast.error(
+          'The captured frame is larger than 5MB. Try a lower-resolution video or upload an image instead.',
+        );
+        return;
+      }
       const ok = await uploadPoster(file);
       if (ok) clearStaged();
     } finally {

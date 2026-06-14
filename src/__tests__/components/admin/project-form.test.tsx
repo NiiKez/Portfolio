@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -303,6 +303,29 @@ describe('ProjectForm (create mode)', () => {
     render(<ProjectForm allSkills={allSkills} />);
 
     expect(screen.queryByTestId('screenshot-uploader')).not.toBeInTheDocument();
+  });
+
+  it('ignores a re-submit while the first create is still pending (no duplicate row)', async () => {
+    // The action never resolves, so the form stays pending after the first
+    // submit. A second submit dispatched directly on the <form> bypasses the
+    // disabled button — the in-handler `if (isPending) return` guard is what
+    // must stop it from firing a second createProject (duplicate project).
+    createProjectMock.mockReturnValue(new Promise(() => {}));
+    const user = userEvent.setup();
+    const { container } = render(<ProjectForm allSkills={allSkills} />);
+
+    await user.type(screen.getByLabelText('Title'), 'My Project');
+    await user.type(screen.getByLabelText('Description'), 'A description');
+    await user.click(screen.getByRole('button', { name: 'Create project' }));
+
+    // Wait until the pending state has committed (button shows "Creating…").
+    await screen.findByRole('button', { name: 'Creating…' });
+
+    const form = container.querySelector('form')!;
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+
+    expect(createProjectMock).toHaveBeenCalledTimes(1);
   });
 });
 

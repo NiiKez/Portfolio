@@ -64,6 +64,28 @@ describe('markdownToPlainText', () => {
     ).toBe('See Wikipedia now.');
   });
 
+  it('keeps link text that itself contains brackets without leaking ](', () => {
+    const text = markdownToPlainText('Read [see [docs] here](https://x.com).');
+    expect(text).toBe('Read see [docs] here.');
+    expect(text).not.toContain('](');
+    expect(text).not.toContain('https://x.com');
+  });
+
+  it('drops reference-style link definitions and keeps usage text', () => {
+    const md = [
+      'See [the docs][ref] for details.',
+      '',
+      '[ref]: https://example.com/docs "Title"',
+    ].join('\n');
+
+    const text = markdownToPlainText(md);
+
+    expect(text).toBe('See the docs for details.');
+    expect(text).not.toContain('https://example.com');
+    expect(text).not.toContain('[ref]');
+    expect(text).not.toContain('](');
+  });
+
   it('collapses runs of whitespace and trims the result', () => {
     expect(markdownToPlainText('  hello   \n\n   world  ')).toBe('hello world');
   });
