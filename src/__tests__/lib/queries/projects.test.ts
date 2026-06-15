@@ -289,6 +289,16 @@ describe('getFeaturedProjects', () => {
 
     expect(fromMock).toHaveBeenCalledWith('projects');
     expect(chain.limit).toHaveBeenCalledWith(2);
+    // The deterministic order is what makes a server-side `.limit(2)` return the
+    // SAME first two projects the old `getProjects().slice(0, 2)` did. Pin it so a
+    // dropped or reordered `.order()` can't silently make featured selection
+    // arbitrary (which `.limit()` alone wouldn't catch).
+    expect(chain.order).toHaveBeenNthCalledWith(1, 'sort_order', {
+      ascending: true,
+    });
+    expect(chain.order).toHaveBeenNthCalledWith(2, 'created_at', {
+      ascending: true,
+    });
     expect(result).toHaveLength(1);
     expect(result[0]!.screenshots).toEqual([]);
     expect(result[0]!.technologies).toEqual([]);
