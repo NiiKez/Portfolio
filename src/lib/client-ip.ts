@@ -5,26 +5,27 @@ import type { NextRequest } from 'next/server';
 /**
  * Best-effort real client IP for rate-limit keys.
  *
- * The LEFTMOST `x-forwarded-for` entry is fully attacker-controlled — a client
- * can send any `X-Forwarded-For` header it likes — so keying a rate limit on it
- * lets an attacker rotate the value per request and evade the limit entirely.
- * The trustworthy value is the one our own reverse proxy sets, so we prefer:
+ * `x-forwarded-for` is a comma-separated chain whose LEFTMOST entries are fully
+ * attacker-controlled — a client can send any `X-Forwarded-For` it likes — so
+ * keying a rate limit on them lets an attacker rotate the value per request and
+ * evade the limit entirely. The trustworthy value is the RIGHTMOST entry: the
+ * address our single front proxy *appended* for the host that actually connected
+ * to it (a forged leftmost value is shifted left and ignored).
  *
- *   1. `x-real-ip` — set by the trusted proxy to the actual TCP peer, then
- *   2. the RIGHTMOST `x-forwarded-for` entry — the address the proxy *appended*
- *      for the host that connected to it (a forged leftmost value is shifted
- *      left and ignored), then
- *   3. `'unknown'` — a shared bucket when neither header is present (e.g. local
- *      dev), which fails closed rather than open.
+ * This app is fronted directly by Azure Container Apps' Envoy ingress — a single
+ * trusted hop. Envoy appends the real TCP peer as the rightmost `x-forwarded-for`
+ * entry and does NOT set `x-real-ip`. We therefore key on the rightmost
+ * `x-forwarded-for` entry and deliberately do NOT trust `x-real-ip`: nothing in
+ * front of us authoritatively sets or strips it, so a client-supplied
+ * `X-Real-IP` would be forgeable and let an attacker mint a fresh rate-limit
+ * bucket per request. (If a reverse proxy that authoritatively sets `x-real-ip`
+ * is ever placed in front, or more proxy hops are added, revisit this — take the
+ * entry that many hops from the right.)
  *
- * This assumes exactly ONE trusted proxy in front of the app (the deploy host's
- * reverse proxy). If more proxies are added in front, take the entry that many
- * hops from the right instead of the last one.
+ * Falls back to `'unknown'` — a single shared bucket — when no forwarded chain
+ * is present (e.g. local dev), which fails closed rather than open.
  */
 export function getClientIp(request: NextRequest): string {
-  const realIp = request.headers.get('x-real-ip')?.trim();
-  if (realIp) return realIp;
-
   const forwarded = request.headers.get('x-forwarded-for');
   if (forwarded) {
     const last = forwarded

@@ -29,6 +29,9 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Drop the `X-Powered-By: Next.js` header — standard hardening that removes a
+  // free framework-fingerprinting signal from every response.
+  poweredByHeader: false,
   async headers() {
     return [{ source: '/(.*)', headers: securityHeaders }];
   },
