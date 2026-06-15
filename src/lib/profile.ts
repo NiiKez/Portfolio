@@ -21,14 +21,14 @@ const EMAIL_PLACEHOLDER = 'you@example.com';
 
 export const profile: Profile = {
   name: 'Fatih Dev Portfolio',
-  title: 'Full-Stack Developer',
+  title: 'Software Engineer',
   bio: 'I build modern applications with a focus on clean code, great user experiences, and scalable architecture.',
   about: 'TODO',
-  // Placeholder address — swap in your real email and every email affordance
-  // (the About contact card, the footer + hero mail icons) lights up. Until
-  // then `hasContactEmail()` treats this seed as "unset" so they stay hidden,
-  // the same "placeholder ⇒ hidden" idea as `about`'s TODO copy.
-  email: EMAIL_PLACEHOLDER,
+  // Real contact address — every email affordance (the About contact card, the
+  // footer + hero mail icons) is now live because this differs from
+  // EMAIL_PLACEHOLDER, so `hasContactEmail()` returns true. Reset it to
+  // EMAIL_PLACEHOLDER to hide them again.
+  email: 'oncufatih26@gmail.com',
   github: 'https://github.com/NiiKez',
   linkedin: 'https://www.linkedin.com/in/fatih-oe/',
   location: 'Germany/Remote',

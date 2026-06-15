@@ -14,19 +14,22 @@ function makeRequest(headers: Record<string, string> = {}) {
 }
 
 describe('getClientIp', () => {
-  it('prefers x-real-ip (the value set by the trusted proxy)', () => {
+  it('ignores the client-forgeable x-real-ip and keys on the rightmost x-forwarded-for entry', () => {
+    // On a direct-Envoy ACA deployment nothing trusted sets `x-real-ip`, so a
+    // client-supplied value is forgeable and must NOT be trusted. The trusted
+    // value is the rightmost x-forwarded-for entry (5.6.7.8) that Envoy appended
+    // for the real peer; the leftmost (1.2.3.4) is client-spoofable.
     const ip = getClientIp(
       makeRequest({
         'x-real-ip': '203.0.113.7',
-        // A forged, attacker-controlled forwarded chain must be ignored.
         'x-forwarded-for': '1.2.3.4, 5.6.7.8',
       }),
     );
 
-    expect(ip).toBe('203.0.113.7');
+    expect(ip).toBe('5.6.7.8');
   });
 
-  it('falls back to the rightmost x-forwarded-for entry when x-real-ip is absent', () => {
+  it('uses the rightmost x-forwarded-for entry', () => {
     // Leftmost (9.9.9.9) is client-spoofable; the trusted proxy appends the real
     // peer (10.0.0.1) on the right, so that is the value we key on.
     const ip = getClientIp(

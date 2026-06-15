@@ -254,7 +254,7 @@ describe('POST /api/auth/send-otp', () => {
     );
   });
 
-  it('prefers x-real-ip over x-forwarded-for for the rate-limit key', async () => {
+  it('ignores the client-forgeable x-real-ip and keys on the rightmost x-forwarded-for IP', async () => {
     await POST(
       makeRequest(JSON.stringify({ email: 'admin@example.com' }), {
         'x-real-ip': '203.0.113.7',
@@ -263,7 +263,7 @@ describe('POST /api/auth/send-otp', () => {
     );
 
     expect(rateLimitMock).toHaveBeenCalledWith(
-      'send-otp:203.0.113.7',
+      'send-otp:10.0.0.1',
       5,
       15 * 60 * 1000,
     );
