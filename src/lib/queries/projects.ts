@@ -66,6 +66,26 @@ export const getProjects = cache(async (): Promise<ProjectWithDetails[]> => {
   return (data ?? []).map(mapRow);
 });
 
+// Bounded variant for the home page, which renders only a couple of cards.
+// `getProjects()` fetches the ENTIRE projects table (plus every screenshot and
+// technology) — fine for the `/projects` listing, but the home page would scan
+// the whole table only to discard everything past the first `limit`. This caps
+// the scan server-side. Shares the request-scoped `cache()` (keyed on `limit`),
+// so distinct calls don't collide with the unbounded `getProjects()`.
+export const getFeaturedProjects = cache(
+  async (limit = 2): Promise<ProjectWithDetails[]> => {
+    const supabase = createPublicClient();
+
+    const { data, error } = await projectDetailQuery(supabase)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true })
+      .limit(limit);
+
+    if (error) throw error;
+    return (data ?? []).map(mapRow);
+  },
+);
+
 export const getProjectById = cache(
   async (id: string): Promise<ProjectWithDetails | null> => {
     const supabase = createPublicClient();

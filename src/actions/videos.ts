@@ -8,7 +8,7 @@ import {
   actionSuccess,
   type ActionResponse,
 } from '@/lib/action-response';
-import { env } from '@/lib/env';
+import { isAdminEmail } from '@/lib/admin-email';
 import { logger } from '@/lib/logger';
 import { safeAction } from '@/lib/safe-action';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -357,7 +357,7 @@ export async function setProjectVideoPoster(
       data: { user },
     } = await supabase.auth.getUser();
 
-    if (!user || user.email !== env.ADMIN_EMAIL) {
+    if (!user || !isAdminEmail(user.email)) {
       logger.warn('videos.setPoster: unauthorized', {
         action: 'videos.setPoster',
         userId: user?.id ?? null,

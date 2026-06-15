@@ -10,7 +10,11 @@ vi.mock('@/lib/supabase/public', () => ({
   })),
 }));
 
-import { getProjectById, getProjects } from '@/lib/queries/projects';
+import {
+  getFeaturedProjects,
+  getProjectById,
+  getProjects,
+} from '@/lib/queries/projects';
 
 type SupabaseResult = {
   data: unknown;
@@ -36,6 +40,15 @@ function createSingleChain(result: SupabaseResult) {
   chain.select = vi.fn(() => chain);
   chain.eq = vi.fn(() => chain);
   chain.maybeSingle = vi.fn(async () => result);
+  return chain;
+}
+
+// Chain for getFeaturedProjects: .select().order().order().limit() resolves.
+function createFeaturedChain(result: SupabaseResult) {
+  const chain: Record<string, unknown> = {};
+  chain.select = vi.fn(() => chain);
+  chain.order = vi.fn(() => chain);
+  chain.limit = vi.fn(async () => result);
   return chain;
 }
 
@@ -261,5 +274,82 @@ describe('getProjectById', () => {
     );
 
     await expect(getProjectById('p1')).rejects.toEqual({ message: 'nope' });
+  });
+});
+
+describe('getFeaturedProjects', () => {
+  it('bounds the query with a server-side limit (default 2) and maps rows', async () => {
+    const chain = createFeaturedChain({
+      data: [{ ...baseProjectRow, screenshots: [], project_technologies: [] }],
+      error: null,
+    });
+    fromMock.mockReturnValue(chain);
+
+    const result = await getFeaturedProjects();
+
+    expect(fromMock).toHaveBeenCalledWith('projects');
+    expect(chain.limit).toHaveBeenCalledWith(2);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.screenshots).toEqual([]);
+    expect(result[0]!.technologies).toEqual([]);
+  });
+
+  it('forwards a custom limit to the query', async () => {
+    const chain = createFeaturedChain({ data: [], error: null });
+    fromMock.mockReturnValue(chain);
+
+    await getFeaturedProjects(5);
+
+    expect(chain.limit).toHaveBeenCalledWith(5);
+  });
+
+  it('reuses mapRow so screenshots/technologies are sorted by sort_order', async () => {
+    const chain = createFeaturedChain({
+      data: [
+        {
+          ...baseProjectRow,
+          screenshots: [
+            {
+              id: 'b',
+              project_id: 'p1',
+              storage_path: 'b',
+              alt_text: null,
+              sort_order: 1,
+              created_at: '',
+            },
+            {
+              id: 'a',
+              project_id: 'p1',
+              storage_path: 'a',
+              alt_text: null,
+              sort_order: 0,
+              created_at: '',
+            },
+          ],
+          project_technologies: [{ skills: skillA }],
+        },
+      ],
+      error: null,
+    });
+    fromMock.mockReturnValue(chain);
+
+    const result = await getFeaturedProjects(2);
+
+    expect(result[0]!.screenshots.map((s) => s.id)).toEqual(['a', 'b']);
+    expect(result[0]!.technologies).toEqual([skillA]);
+  });
+
+  it('returns an empty array when there are no projects', async () => {
+    fromMock.mockReturnValue(createFeaturedChain({ data: [], error: null }));
+
+    await expect(getFeaturedProjects()).resolves.toEqual([]);
+  });
+
+  it('throws when supabase returns an error', async () => {
+    fromMock.mockReturnValue(
+      createFeaturedChain({ data: null, error: { message: 'kaboom' } }),
+    );
+
+    await expect(getFeaturedProjects()).rejects.toEqual({ message: 'kaboom' });
   });
 });

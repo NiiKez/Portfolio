@@ -8,7 +8,7 @@ import {
   actionSuccess,
   type ActionResponse,
 } from '@/lib/action-response';
-import { env } from '@/lib/env';
+import { isAdminEmail } from '@/lib/admin-email';
 import { logger } from '@/lib/logger';
 import { safeAction } from '@/lib/safe-action';
 import { createClient } from '@/lib/supabase/server';
@@ -88,7 +88,7 @@ export async function uploadScreenshot(
       data: { user },
     } = await supabase.auth.getUser();
 
-    if (!user || user.email !== env.ADMIN_EMAIL) {
+    if (!user || !isAdminEmail(user.email)) {
       logger.warn('screenshots.upload: unauthorized', {
         action: 'screenshots.upload',
         userId: user?.id ?? null,

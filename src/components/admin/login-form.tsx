@@ -42,24 +42,34 @@ export function LoginForm({ initialError }: LoginFormProps) {
     setStatus('sending');
     setError(null);
 
-    const res = await fetch('/api/auth/send-otp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
-    });
+    try {
+      const res = await fetch('/api/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
 
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setStatus('error');
+        setError(
+          (data as { error?: string }).error ??
+            'Sign-in failed. Please try again.',
+        );
+        return;
+      }
+
+      setStatus('sent');
+      setCooldown(RESEND_COOLDOWN_SECONDS);
+    } catch {
+      // A thrown fetch (offline, DNS failure, server unreachable) must not leave
+      // the button stuck on "Signing in…" — reset to an error state so the admin
+      // can retry without reloading the page.
       setStatus('error');
       setError(
-        (data as { error?: string }).error ??
-          'Sign-in failed. Please try again.',
+        'Could not reach the server. Check your connection and try again.',
       );
-      return;
     }
-
-    setStatus('sent');
-    setCooldown(RESEND_COOLDOWN_SECONDS);
   }
 
   const disabled = status === 'sending' || cooldown > 0;

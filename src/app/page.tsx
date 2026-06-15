@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { DailyDrivers } from '@/components/home/daily-drivers';
 import { FeaturedProjects } from '@/components/home/featured-projects';
 import { HomeHero } from '@/components/home/home-hero';
-import { getProjects } from '@/lib/queries/projects';
+import { getFeaturedProjects } from '@/lib/queries/projects';
 import { getSkills } from '@/lib/queries/skills';
 
 export const metadata: Metadata = {
@@ -13,12 +13,14 @@ export const metadata: Metadata = {
 };
 
 export default async function HomePage() {
-  const [skills, projects] = await Promise.all([getSkills(), getProjects()]);
+  const [skills, featured] = await Promise.all([
+    getSkills(),
+    getFeaturedProjects(2),
+  ]);
 
   const dailyDrivers = skills
     .filter((s) => s.proficiency === 'advanced')
     .slice(0, 8);
-  const featured = projects.slice(0, 2);
 
   return (
     <div className="mx-auto w-full max-w-5xl px-6">
