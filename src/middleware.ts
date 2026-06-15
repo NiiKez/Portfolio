@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
+import { isAdminEmail } from '@/lib/admin-email';
 import { buildCsp, generateNonce } from '@/lib/csp';
 import { env } from '@/lib/env';
 import { updateSession } from '@/lib/supabase/middleware';
@@ -66,7 +67,7 @@ export async function middleware(request: NextRequest) {
 
   const isLoginRoute = pathname === '/admin/login';
   const isAdminRoute = pathname.startsWith('/admin');
-  const isAdmin = user?.email === env.ADMIN_EMAIL;
+  const isAdmin = isAdminEmail(user?.email);
 
   if (isAdminRoute && !isLoginRoute && !isAdmin) {
     const url = request.nextUrl.clone();

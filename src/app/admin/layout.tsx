@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { AdminNav } from '@/components/admin/admin-nav';
 import { AdminSidebar } from '@/components/admin/admin-sidebar';
 import { Toaster } from '@/components/ui/sonner';
-import { env } from '@/lib/env';
+import { isAdminEmail } from '@/lib/admin-email';
 import { createClient } from '@/lib/supabase/server';
 
 export default async function AdminLayout({
@@ -16,7 +16,7 @@ export default async function AdminLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user || user.email !== env.ADMIN_EMAIL) {
+  if (!user || !isAdminEmail(user.email)) {
     return (
       <>
         {children}

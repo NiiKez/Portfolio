@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
+import { isAdminEmail } from '@/lib/admin-email';
 import { getClientIp } from '@/lib/client-ip';
-import { env } from '@/lib/env';
 import { rateLimit } from '@/lib/rate-limit';
 import { createClient } from '@/lib/supabase/server';
 
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (user?.email !== env.ADMIN_EMAIL) {
+  if (!isAdminEmail(user?.email)) {
     await supabase.auth.signOut();
     return NextResponse.redirect(`${origin}/admin/login?error=unauthorized`);
   }
