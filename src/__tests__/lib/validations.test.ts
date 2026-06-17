@@ -269,10 +269,10 @@ describe('projectSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('rejects descriptions longer than 5000 characters', () => {
+  it('rejects descriptions longer than 5500 characters', () => {
     const result = projectSchema.safeParse({
       title: 'Portfolio',
-      description: 'a'.repeat(5001),
+      description: 'a'.repeat(5501),
     });
     expect(result.success).toBe(false);
   });

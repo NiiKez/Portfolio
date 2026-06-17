@@ -224,6 +224,27 @@ export type Database = {
         };
         Relationships: [];
       };
+      page_views: {
+        Row: {
+          id: number;
+          path: string;
+          referrer: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: number;
+          path: string;
+          referrer?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: number;
+          path?: string;
+          referrer?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<never, never>;
     Functions: {
@@ -253,6 +274,10 @@ export type Database = {
           p_technology_ids: string[];
         };
         Returns: Database['portfolio']['Tables']['projects']['Row'];
+      };
+      page_view_summary: {
+        Args: { p_days?: number };
+        Returns: Json;
       };
     };
     Enums: Record<never, never>;

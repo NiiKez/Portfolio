@@ -8,6 +8,7 @@ import {
 
 import { Footer } from '@/components/footer';
 import { Header } from '@/components/header';
+import { PageViewTracker } from '@/components/page-view-tracker';
 import { ThemeProvider } from '@/components/theme-provider';
 import { getBaseUrl } from '@/lib/site-url';
 
@@ -94,6 +95,7 @@ export default async function RootLayout({
             {children}
           </main>
           <Footer />
+          <PageViewTracker />
         </ThemeProvider>
       </body>
     </html>
