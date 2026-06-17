@@ -75,7 +75,7 @@ export type ExperienceInput = z.infer<typeof experienceSchema>;
 
 export const projectSchema = z.object({
   title: z.string().trim().min(1, 'Title is required').max(200),
-  description: z.string().trim().min(1, 'Description is required').max(5000),
+  description: z.string().trim().min(1, 'Description is required').max(5500),
   github_url: optionalHttpsUrl,
   live_url: optionalHttpsUrl,
   // Dedupe so a duplicate skill id can't violate the

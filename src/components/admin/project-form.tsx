@@ -131,7 +131,7 @@ export function ProjectForm({ project, allSkills }: ProjectFormProps) {
           onChange={setDescription}
           disabled={isPending}
           aria-invalid={Boolean(errors.description)}
-          maxLength={5000}
+          maxLength={5500}
           rows={12}
         />
         {errors.description && (
