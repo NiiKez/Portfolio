@@ -14,6 +14,16 @@ vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({ from: fromMock }),
 }));
 
+const getUserMock = vi.fn();
+vi.mock('@/lib/supabase/server', () => ({
+  createClient: () => ({ auth: { getUser: getUserMock } }),
+}));
+
+const isAdminEmailMock = vi.fn();
+vi.mock('@/lib/admin-email', () => ({
+  isAdminEmail: (...args: unknown[]) => isAdminEmailMock(...args),
+}));
+
 import { POST } from '@/app/api/track/route';
 
 function makeRequest(
@@ -37,10 +47,19 @@ function makeRequest(
   return request;
 }
 
+// Attach a Supabase session cookie so the route runs its admin-exclusion lookup
+// (it is skipped unless an `sb-*` cookie is present).
+function withSession(request: NextRequest) {
+  request.cookies.set('sb-portfolio-auth-token', 'fake-session');
+  return request;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   rateLimitMock.mockReturnValue({ allowed: true, retryAfter: 0 });
   insertMock.mockResolvedValue({ error: null });
+  getUserMock.mockResolvedValue({ data: { user: null } });
+  isAdminEmailMock.mockReturnValue(false);
 });
 
 describe('POST /api/track', () => {
@@ -184,6 +203,54 @@ describe('POST /api/track', () => {
 
     expect(res.status).toBe(204);
     expect(fromMock).not.toHaveBeenCalled();
+  });
+
+  it("does not record the admin's own page view, even on a public path", async () => {
+    getUserMock.mockResolvedValue({
+      data: { user: { email: 'admin@example.com' } },
+    });
+    isAdminEmailMock.mockReturnValue(true);
+
+    const res = await POST(
+      withSession(makeRequest(JSON.stringify({ path: '/projects' }))),
+    );
+
+    expect(res.status).toBe(204);
+    expect(isAdminEmailMock).toHaveBeenCalledWith('admin@example.com');
+    expect(fromMock).not.toHaveBeenCalled();
+  });
+
+  it('records a non-admin authenticated visitor', async () => {
+    getUserMock.mockResolvedValue({
+      data: { user: { email: 'someone@else.com' } },
+    });
+    isAdminEmailMock.mockReturnValue(false);
+
+    const res = await POST(
+      withSession(makeRequest(JSON.stringify({ path: '/projects' }))),
+    );
+
+    expect(res.status).toBe(204);
+    expect(fromMock).toHaveBeenCalledWith('page_views');
+  });
+
+  it('skips the auth lookup entirely when no Supabase session cookie is present', async () => {
+    const res = await POST(makeRequest(JSON.stringify({ path: '/projects' })));
+
+    expect(res.status).toBe(204);
+    expect(getUserMock).not.toHaveBeenCalled();
+    expect(fromMock).toHaveBeenCalledWith('page_views');
+  });
+
+  it('fails open (records) when the admin auth lookup throws', async () => {
+    getUserMock.mockRejectedValue(new Error('auth server down'));
+
+    const res = await POST(
+      withSession(makeRequest(JSON.stringify({ path: '/projects' }))),
+    );
+
+    expect(res.status).toBe(204);
+    expect(fromMock).toHaveBeenCalledWith('page_views');
   });
 
   it('silently drops a non-trackable (admin) path without inserting', async () => {
