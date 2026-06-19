@@ -1,10 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 
+import { isAdminEmail } from '@/lib/admin-email';
 import { sanitizePath, sanitizeReferrer } from '@/lib/analytics';
 import { getClientIp } from '@/lib/client-ip';
 import { rateLimit } from '@/lib/rate-limit';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
 
 /**
  * First-party page-view ingest. The public site beacons one POST per navigation
@@ -82,6 +84,27 @@ export async function POST(request: NextRequest) {
 
   const path = sanitizePath(parsed.data.path);
   if (!path) return noContent();
+
+  // Don't record the owner's own browsing — the admin viewing their own public
+  // pages is not organic traffic. The Supabase auth cookie rides along on the
+  // same-origin beacon, so we can identify the session here. Skip the lookup
+  // entirely unless an `sb-*` session cookie is present, so every anonymous
+  // visitor (the common case) never pays for `getUser()`. Wrapped so any auth
+  // hiccup fails OPEN (records the view) rather than 500-ing the beacon — worst
+  // case is one self-view counted, never a dropped visitor.
+  try {
+    const hasSession = request.cookies
+      .getAll()
+      .some((cookie) => cookie.name.startsWith('sb-'));
+    if (hasSession) {
+      const {
+        data: { user },
+      } = await (await createClient()).auth.getUser();
+      if (isAdminEmail(user?.email)) return noContent();
+    }
+  } catch {
+    // Fail open: an auth lookup failure must never break the quiet contract.
+  }
 
   const referrer = sanitizeReferrer(parsed.data.referrer, host);
 
