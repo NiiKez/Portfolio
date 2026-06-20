@@ -1,0 +1,23 @@
+version: 2
+updates:
+  # npm dependencies — version updates (security updates are handled separately
+  # by Dependabot security updates, enabled in repo settings).
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # Batch routine minor/patch bumps into a single PR to cut review noise;
+      # majors still open as individual PRs so they get a closer look.
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  # Keep the GitHub Actions used by CI current (also clears the Node 20
+  # deprecation warning by moving checkout/setup-node off their stale majors).
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
