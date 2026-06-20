@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
+import { assertReorderIdsExist, distinctReorderIds } from '@/lib/reorder';
 import { safeAction } from '@/lib/safe-action';
 import { createClient } from '@/lib/supabase/server';
 import {
@@ -101,12 +102,26 @@ export const reorderExperiences = safeAction<ReorderInput, { count: number }>({
   schema: reorderSchema,
   handler: async (items) => {
     const supabase = await createClient();
+    const ids = distinctReorderIds(items);
+
+    // Verify every id exists before the wholesale UPDATE; an unknown id (a
+    // stale/replayed payload) would otherwise be silently ignored yet still
+    // reported as a success.
+    const { data: rows, error: fetchError } = await supabase
+      .from('experiences')
+      .select('id')
+      .in('id', ids);
+    if (fetchError) throw fetchError;
+    assertReorderIdsExist(
+      ids,
+      (rows ?? []).map((row) => row.id),
+    );
 
     // Single atomic statement instead of one UPDATE per row.
     const { error } = await supabase.rpc('reorder_experiences', { items });
     if (error) throw error;
 
     revalidateExperienceSurfaces();
-    return { count: items.length };
+    return { count: ids.length };
   },
 });

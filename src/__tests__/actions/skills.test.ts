@@ -67,6 +67,7 @@ function createChain(state: ChainState) {
     'order',
     'limit',
     'eq',
+    'in',
   ]) {
     chain[method] = vi.fn(() => chain);
   }
@@ -338,6 +339,11 @@ describe('reorderSkills', () => {
   const idB = '22222222-2222-4222-8222-222222222222';
 
   it('updates sort_order for each item and revalidates surfaces', async () => {
+    chainState.terminal = {
+      data: [{ id: idA }, { id: idB }],
+      error: null,
+    };
+
     const result = await reorderSkills([
       { id: idA, sort_order: 0 },
       { id: idB, sort_order: 1 },
@@ -351,6 +357,32 @@ describe('reorderSkills', () => {
       ],
     });
     expect(revalidatePath).toHaveBeenCalledWith('/admin/skills');
+  });
+
+  it('fails without calling the RPC when a requested id does not exist', async () => {
+    // Only idA exists; idB is a stale/unknown id. The existence check must
+    // fail BEFORE the wholesale UPDATE rather than report a phantom success.
+    chainState.terminal = { data: [{ id: idA }], error: null };
+
+    const result = await reorderSkills([
+      { id: idA, sort_order: 0 },
+      { id: idB, sort_order: 1 },
+    ]);
+
+    expect(result.success).toBe(false);
+    expect(rpcMock).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it('rejects a duplicate-id payload before any database call', async () => {
+    const result = await reorderSkills([
+      { id: idA, sort_order: 0 },
+      { id: idA, sort_order: 1 },
+    ]);
+
+    expect(result.success).toBe(false);
+    expect(fromMock).not.toHaveBeenCalled();
+    expect(rpcMock).not.toHaveBeenCalled();
   });
 
   it('rejects items with non-uuid ids without touching the database', async () => {
@@ -379,6 +411,7 @@ describe('reorderSkills', () => {
   });
 
   it('returns a generic error when the reorder fails', async () => {
+    chainState.terminal = { data: [{ id: idA }], error: null };
     rpcMock.mockResolvedValue({
       data: null,
       error: { message: 'db offline' },
