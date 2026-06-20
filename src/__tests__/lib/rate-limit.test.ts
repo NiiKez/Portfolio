@@ -2,9 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
-import { __resetRateLimit, rateLimit } from '@/lib/rate-limit';
+import { __rateLimitSize, __resetRateLimit, rateLimit } from '@/lib/rate-limit';
 
 const WINDOW = 15 * 60 * 1000;
+const SWEEP_INTERVAL_MS = 60_000;
 
 beforeEach(() => {
   // The store is module-global and never reset on its own; clear it so cases do
@@ -102,5 +103,76 @@ describe('rateLimit', () => {
     // keyA is now exhausted, but keyB is untouched.
     expect(rateLimit(keyA, max, WINDOW).allowed).toBe(false);
     expect(rateLimit(keyB, max, WINDOW).allowed).toBe(true);
+  });
+
+  it('evicts expired entries once the sweep interval has elapsed', () => {
+    vi.useFakeTimers();
+    const start = 3_000_000_000_000;
+    vi.setSystemTime(start);
+
+    const max = 5;
+    const windowMs = 10_000;
+
+    // Two distinct keys open windows. The first call also runs the initial
+    // sweep (lastSweepAt was reset to 0), pinning lastSweepAt to `start`.
+    rateLimit('evict-key-a', max, windowMs);
+    rateLimit('evict-key-b', max, windowMs);
+    expect(__rateLimitSize()).toBe(2);
+
+    // Advance past BOTH windows and past the sweep interval, then hit a third
+    // key. That call triggers a sweep, which evicts the two expired entries.
+    vi.setSystemTime(start + windowMs + SWEEP_INTERVAL_MS + 1);
+    rateLimit('evict-key-c', max, windowMs);
+
+    // Only the freshly-created third key remains.
+    expect(__rateLimitSize()).toBe(1);
+  });
+
+  it('does not evict expired entries before the sweep interval elapses', () => {
+    vi.useFakeTimers();
+    const start = 4_000_000_000_000;
+    vi.setSystemTime(start);
+
+    const max = 5;
+    const windowMs = 10_000;
+
+    // First call runs the initial sweep and pins lastSweepAt to `start`.
+    rateLimit('amortize-key-a', max, windowMs);
+    expect(__rateLimitSize()).toBe(1);
+
+    // Advance PAST the first key's window but LESS than the sweep interval,
+    // then add a second key. The sweep is gated, so the now-expired first
+    // entry is not reclaimed yet — eviction is amortized, not immediate.
+    vi.setSystemTime(start + windowMs + 1);
+    expect(start + windowMs + 1 - start).toBeLessThan(SWEEP_INTERVAL_MS);
+    rateLimit('amortize-key-b', max, windowMs);
+
+    expect(__rateLimitSize()).toBe(2);
+  });
+
+  it('never evicts an entry that is still within its window', () => {
+    vi.useFakeTimers();
+    const start = 5_000_000_000_000;
+    vi.setSystemTime(start);
+
+    const max = 5;
+    const liveWindowMs = SWEEP_INTERVAL_MS * 10; // outlives the sweep interval
+    const shortWindowMs = 1_000;
+
+    // First call runs the initial sweep and pins lastSweepAt to `start`.
+    rateLimit('survivor-key', max, liveWindowMs);
+
+    // Advance past the sweep interval so the next call triggers a sweep, while
+    // the survivor's long window is still open.
+    vi.setSystemTime(start + SWEEP_INTERVAL_MS + 1);
+    rateLimit('sweep-trigger-key', max, shortWindowMs);
+
+    // The still-live survivor was not evicted; both keys are present.
+    expect(__rateLimitSize()).toBe(2);
+
+    // And the survivor's counter is intact — its second hit still increments.
+    const survivor = rateLimit('survivor-key', max, liveWindowMs);
+    expect(survivor.allowed).toBe(true);
+    expect(survivor.retryAfter).toBe(0);
   });
 });
