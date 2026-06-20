@@ -3,6 +3,9 @@ on:
   push: { branches: [main] }
   pull_request: { branches: [main] }
   workflow_dispatch:
+# Least-privilege default token for every job (override per-job if a step needs more).
+permissions:
+  contents: read
 jobs:
   quality:
     runs-on: ubuntu-latest
@@ -29,3 +32,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: semgrep scan --config=auto --error src/
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so the scan covers every commit, not just the tip
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
