@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import { logger } from '@/lib/logger';
+import { assertReorderIdsExist, distinctReorderIds } from '@/lib/reorder';
 import { safeAction } from '@/lib/safe-action';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
@@ -196,12 +197,26 @@ export const reorderProjects = safeAction<ReorderInput, { count: number }>({
   schema: reorderSchema,
   handler: async (items) => {
     const supabase = await createClient();
+    const ids = distinctReorderIds(items);
+
+    // Verify every id exists before the wholesale UPDATE; an unknown id (a
+    // stale/replayed payload) would otherwise be silently ignored yet still
+    // reported as a success.
+    const { data: rows, error: fetchError } = await supabase
+      .from('projects')
+      .select('id')
+      .in('id', ids);
+    if (fetchError) throw fetchError;
+    assertReorderIdsExist(
+      ids,
+      (rows ?? []).map((row) => row.id),
+    );
 
     // Single atomic statement instead of one UPDATE per row.
     const { error } = await supabase.rpc('reorder_projects', { items });
     if (error) throw error;
 
     revalidateProjectSurfaces();
-    return { count: items.length };
+    return { count: ids.length };
   },
 });

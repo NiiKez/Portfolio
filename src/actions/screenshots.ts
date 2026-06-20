@@ -10,6 +10,7 @@ import {
 } from '@/lib/action-response';
 import { isAdminEmail } from '@/lib/admin-email';
 import { logger } from '@/lib/logger';
+import { assertReorderIdsExist, distinctReorderIds } from '@/lib/reorder';
 import { safeAction } from '@/lib/safe-action';
 import { createClient } from '@/lib/supabase/server';
 import { reorderSchema, type ReorderInput } from '@/lib/validations';
@@ -247,16 +248,27 @@ export const reorderScreenshots = safeAction<ReorderInput, { count: number }>({
   schema: reorderSchema,
   handler: async (items) => {
     const supabase = await createClient();
+    const ids = distinctReorderIds(items);
 
-    const ids = items.map((i) => i.id);
     const { data: rows, error: fetchError } = await supabase
       .from('project_screenshots')
       .select('id, project_id')
       .in('id', ids);
-
     if (fetchError) throw fetchError;
 
-    const projectIds = new Set((rows ?? []).map((r) => r.project_id));
+    const found = rows ?? [];
+    assertReorderIdsExist(
+      ids,
+      found.map((row) => row.id),
+    );
+
+    // A reorder payload must stay within one project; ids spanning multiple
+    // projects (a malformed/stale request) would shuffle sort_order across
+    // projects in a single wholesale UPDATE.
+    const projectIds = new Set(found.map((row) => row.project_id));
+    if (projectIds.size > 1) {
+      throw new Error('reorder: screenshots span multiple projects');
+    }
 
     // Single atomic statement instead of one UPDATE per row.
     const { error } = await supabase.rpc('reorder_project_screenshots', {
@@ -268,6 +280,6 @@ export const reorderScreenshots = safeAction<ReorderInput, { count: number }>({
       revalidateScreenshotSurfaces(projectId);
     }
 
-    return { count: items.length };
+    return { count: ids.length };
   },
 });

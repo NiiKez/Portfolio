@@ -492,4 +492,55 @@ describe('reorderScreenshots', () => {
     expect(result.success).toBe(false);
     expect(revalidatePath).not.toHaveBeenCalled();
   });
+
+  it('fails without calling the RPC when a requested id does not exist', async () => {
+    // The fetch returns only one of the two requested ids — a stale/unknown id
+    // must fail the existence check BEFORE the wholesale UPDATE.
+    tables.project_screenshots.terminal = {
+      data: [{ id: screenshotId, project_id: projectId }],
+      error: null,
+    };
+
+    const result = await reorderScreenshots([
+      { id: screenshotId, sort_order: 0 },
+      { id: screenshotId2, sort_order: 1 },
+    ]);
+
+    expect(result.success).toBe(false);
+    expect(rpcMock).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it('fails when the screenshots span multiple projects', async () => {
+    // A reorder payload that mixes screenshots from two different projects
+    // would shuffle sort_order across projects in one wholesale UPDATE.
+    const otherProjectId = '44444444-4444-4444-8444-444444444444';
+    tables.project_screenshots.terminal = {
+      data: [
+        { id: screenshotId, project_id: projectId },
+        { id: screenshotId2, project_id: otherProjectId },
+      ],
+      error: null,
+    };
+
+    const result = await reorderScreenshots([
+      { id: screenshotId, sort_order: 0 },
+      { id: screenshotId2, sort_order: 1 },
+    ]);
+
+    expect(result.success).toBe(false);
+    expect(rpcMock).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it('rejects a duplicate-id payload before any database call', async () => {
+    const result = await reorderScreenshots([
+      { id: screenshotId, sort_order: 0 },
+      { id: screenshotId, sort_order: 1 },
+    ]);
+
+    expect(result.success).toBe(false);
+    expect(fromMock).not.toHaveBeenCalled();
+    expect(rpcMock).not.toHaveBeenCalled();
+  });
 });

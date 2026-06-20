@@ -81,6 +81,7 @@ function createChain(state: TableState) {
     'order',
     'limit',
     'eq',
+    'in',
   ]) {
     chain[method] = vi.fn(() => chain);
   }
@@ -543,6 +544,11 @@ describe('deleteProject', () => {
 
 describe('reorderProjects', () => {
   it('updates sort_order for each item and revalidates surfaces', async () => {
+    tables.projects.terminal = {
+      data: [{ id: validUuid1 }, { id: validUuid2 }],
+      error: null,
+    };
+
     const result = await reorderProjects([
       { id: validUuid1, sort_order: 0 },
       { id: validUuid2, sort_order: 1 },
@@ -557,6 +563,32 @@ describe('reorderProjects', () => {
     });
     expect(revalidatePath).toHaveBeenCalledWith('/projects');
     expect(revalidatePath).toHaveBeenCalledWith('/admin/projects');
+  });
+
+  it('fails without calling the RPC when a requested id does not exist', async () => {
+    // Only validUuid1 exists; validUuid2 is a stale/unknown id. The existence
+    // check must fail BEFORE the wholesale UPDATE rather than report success.
+    tables.projects.terminal = { data: [{ id: validUuid1 }], error: null };
+
+    const result = await reorderProjects([
+      { id: validUuid1, sort_order: 0 },
+      { id: validUuid2, sort_order: 1 },
+    ]);
+
+    expect(result.success).toBe(false);
+    expect(rpcMock).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it('rejects a duplicate-id payload before any database call', async () => {
+    const result = await reorderProjects([
+      { id: validUuid1, sort_order: 0 },
+      { id: validUuid1, sort_order: 1 },
+    ]);
+
+    expect(result.success).toBe(false);
+    expect(fromMock).not.toHaveBeenCalled();
+    expect(rpcMock).not.toHaveBeenCalled();
   });
 
   it('rejects items with non-uuid ids', async () => {
@@ -586,6 +618,7 @@ describe('reorderProjects', () => {
   });
 
   it('returns an error when the reorder RPC fails', async () => {
+    tables.projects.terminal = { data: [{ id: validUuid1 }], error: null };
     rpcMock.mockResolvedValue({
       data: null,
       error: { message: 'row locked' },
