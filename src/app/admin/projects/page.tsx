@@ -1,12 +1,14 @@
 import { ProjectList } from '@/components/admin/project-list';
-import { getProjects } from '@/lib/queries/projects';
+import { getProjectsForAdmin } from '@/lib/queries/projects';
 
 export const metadata = {
   title: 'Projects · Admin',
 };
 
 export default async function AdminProjectsPage() {
-  const projects = await getProjects();
+  // Admin variant: includes drafts (unpublished projects), unlike the public
+  // `/projects` listing.
+  const projects = await getProjectsForAdmin();
 
   return <ProjectList initialProjects={projects} />;
 }

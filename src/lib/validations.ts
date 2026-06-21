@@ -78,6 +78,9 @@ export const projectSchema = z.object({
   description: z.string().trim().min(1, 'Description is required').max(5500),
   github_url: optionalHttpsUrl,
   live_url: optionalHttpsUrl,
+  // Draft/publish gate. Defaults to a private draft so a half-finished project
+  // never auto-appears on the public site; the admin flips it on when ready.
+  is_published: z.boolean().optional().default(false),
   // Dedupe so a duplicate skill id can't violate the
   // project_technologies PK(project_id, skill_id) and roll back the whole
   // create/update RPC with a generic "Something went wrong".

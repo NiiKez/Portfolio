@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import { z } from 'zod';
 
 import { ProjectForm } from '@/components/admin/project-form';
-import { getProjectById } from '@/lib/queries/projects';
+import { getProjectByIdForAdmin } from '@/lib/queries/projects';
 import { getSkills } from '@/lib/queries/skills';
 
 type Props = { params: Promise<{ id: string }> };
@@ -20,7 +20,9 @@ export default async function AdminProjectEditPage({ params }: Props) {
 
   const [allSkills, project] = await Promise.all([
     getSkills(),
-    id === 'new' ? null : getProjectById(id),
+    // Admin variant so a draft can be opened and edited (the public
+    // `getProjectById` filters drafts out and would 404 here).
+    id === 'new' ? null : getProjectByIdForAdmin(id),
   ]);
 
   if (id !== 'new' && project === null) notFound();

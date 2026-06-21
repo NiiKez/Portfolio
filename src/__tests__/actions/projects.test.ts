@@ -132,6 +132,7 @@ const insertedProject = {
   title: 'Portfolio',
   description: 'A portfolio site',
   github_url: 'https://github.com/me/portfolio',
+  is_published: false,
   sort_order: 1,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
@@ -158,6 +159,42 @@ describe('createProject', () => {
     expect(revalidatePath).toHaveBeenCalledWith(`/projects/${validUuid1}`);
     expect(revalidatePath).toHaveBeenCalledWith(
       `/admin/projects/${validUuid1}`,
+    );
+  });
+
+  it('defaults a new project to a draft and forwards an explicit publish state', async () => {
+    const projectsChain = createChain(tables.projects);
+    tables.projects.maybeSingle = { data: { sort_order: 2 }, error: null };
+    tables.projects.single = { data: insertedProject, error: null };
+    fromMock.mockImplementation((name: TableName) => {
+      if (name === 'projects') return projectsChain;
+      const state = tables[name] ?? emptyState();
+      tables[name] = state;
+      return createChain(state);
+    });
+
+    // Omitting is_published must persist a private draft (default false).
+    await createProject({
+      title: 'Portfolio',
+      description: 'A portfolio site',
+      github_url: '',
+      technology_ids: [],
+    });
+    expect(projectsChain.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ is_published: false }),
+    );
+
+    // An explicit true is honoured.
+    (projectsChain.insert as ReturnType<typeof vi.fn>).mockClear();
+    await createProject({
+      title: 'Portfolio',
+      description: 'A portfolio site',
+      github_url: '',
+      is_published: true,
+      technology_ids: [],
+    });
+    expect(projectsChain.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ is_published: true }),
     );
   });
 
@@ -307,10 +344,30 @@ describe('updateProject', () => {
       p_github_url: null,
       p_live_url: null,
       p_technology_ids: [validUuid2],
+      p_is_published: false,
     });
     expect(revalidatePath).toHaveBeenCalledWith(`/projects/${validUuid1}`);
     expect(revalidatePath).toHaveBeenCalledWith(
       `/admin/projects/${validUuid1}`,
+    );
+  });
+
+  it('forwards the publish state to the atomic RPC', async () => {
+    rpcMock.mockResolvedValue({ data: insertedProject, error: null });
+
+    const result = await updateProject({
+      id: validUuid1,
+      title: 'Portfolio',
+      description: 'desc',
+      github_url: '',
+      is_published: true,
+      technology_ids: [],
+    });
+
+    expect(result.success).toBe(true);
+    expect(rpcMock).toHaveBeenCalledWith(
+      'update_project_with_techs',
+      expect.objectContaining({ p_is_published: true }),
     );
   });
 

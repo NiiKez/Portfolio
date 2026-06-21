@@ -114,8 +114,13 @@ export function ProjectList({ initialProjects }: ProjectListProps) {
 
                   {/* Content */}
                   <div className="mr-4 min-w-0 flex-1">
-                    <h3 className="mb-1 truncate font-sans text-base font-medium">
-                      {project.title}
+                    <h3 className="mb-1 flex items-center gap-2 font-sans text-base font-medium">
+                      <span className="truncate">{project.title}</span>
+                      {!project.is_published && (
+                        <span className="shrink-0 rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[0.65rem] font-medium uppercase tracking-wide text-amber-600 dark:text-amber-400">
+                          Draft
+                        </span>
+                      )}
                     </h3>
                     {excerpt && (
                       <p className="truncate text-[0.85rem] text-muted-foreground">
