@@ -10,10 +10,20 @@ vi.mock('@/lib/supabase/public', () => ({
   })),
 }));
 
+// The admin loaders read through the authenticated server client; share the
+// same `from` spy so a test can drive either path.
+vi.mock('@/lib/supabase/server', () => ({
+  createClient: vi.fn(async () => ({
+    from: fromMock,
+  })),
+}));
+
 import {
   getFeaturedProjects,
   getProjectById,
+  getProjectByIdForAdmin,
   getProjects,
+  getProjectsForAdmin,
 } from '@/lib/queries/projects';
 
 type SupabaseResult = {
@@ -21,10 +31,11 @@ type SupabaseResult = {
   error: { message: string } | null;
 };
 
-// Chain for getProjects: .select().order().order() resolves.
+// Chain for getProjects: .select().eq().order().order() resolves.
 function createListChain(result: SupabaseResult) {
   const chain: Record<string, unknown> = {};
   chain.select = vi.fn(() => chain);
+  chain.eq = vi.fn(() => chain);
   let orderCalls = 0;
   chain.order = vi.fn(() => {
     orderCalls += 1;
@@ -43,10 +54,11 @@ function createSingleChain(result: SupabaseResult) {
   return chain;
 }
 
-// Chain for getFeaturedProjects: .select().order().order().limit() resolves.
+// Chain for getFeaturedProjects: .select().eq().order().order().limit() resolves.
 function createFeaturedChain(result: SupabaseResult) {
   const chain: Record<string, unknown> = {};
   chain.select = vi.fn(() => chain);
+  chain.eq = vi.fn(() => chain);
   chain.order = vi.fn(() => chain);
   chain.limit = vi.fn(async () => result);
   return chain;
@@ -60,6 +72,7 @@ const baseProjectRow = {
   live_url: null,
   demo_video_path: null,
   demo_video_poster_path: null,
+  is_published: true,
   sort_order: 0,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
@@ -128,8 +141,19 @@ describe('getProjects', () => {
     expect(result).toHaveLength(2);
     expect(result[0]!.screenshots.map((s) => s.id)).toEqual(['a', 'c', 'b']);
     expect(result[0]!.technologies).toEqual([skillA]);
+    expect(result[0]!.is_published).toBe(true);
     expect(result[1]!.screenshots).toEqual([]);
     expect(result[1]!.technologies).toEqual([]);
+  });
+
+  it('filters to published projects (defence-in-depth on top of RLS)', async () => {
+    const chain = createListChain({ data: [], error: null });
+    fromMock.mockReturnValue(chain);
+
+    await getProjects();
+
+    // The public listing must never surface drafts, even if RLS were loosened.
+    expect(chain.eq).toHaveBeenCalledWith('is_published', true);
   });
 
   it('returns empty arrays when screenshots and project_technologies are null', async () => {
@@ -233,6 +257,15 @@ describe('getProjectById', () => {
     expect(result).toBeNull();
   });
 
+  it('filters out drafts so a draft 404s on its public URL', async () => {
+    const chain = createSingleChain({ data: null, error: null });
+    fromMock.mockReturnValue(chain);
+
+    await getProjectById('p1');
+
+    expect(chain.eq).toHaveBeenCalledWith('is_published', true);
+  });
+
   it('maps a single row', async () => {
     const row = {
       ...baseProjectRow,
@@ -288,6 +321,7 @@ describe('getFeaturedProjects', () => {
     const result = await getFeaturedProjects();
 
     expect(fromMock).toHaveBeenCalledWith('projects');
+    expect(chain.eq).toHaveBeenCalledWith('is_published', true);
     expect(chain.limit).toHaveBeenCalledWith(2);
     // The deterministic order is what makes a server-side `.limit(2)` return the
     // SAME first two projects the old `getProjects().slice(0, 2)` did. Pin it so a
@@ -361,5 +395,68 @@ describe('getFeaturedProjects', () => {
     );
 
     await expect(getFeaturedProjects()).rejects.toEqual({ message: 'kaboom' });
+  });
+});
+
+describe('getProjectsForAdmin', () => {
+  it('returns ALL projects with NO published filter (drafts stay visible)', async () => {
+    const draftRow = {
+      ...baseProjectRow,
+      is_published: false,
+      screenshots: [],
+      project_technologies: [],
+    };
+    const chain = createListChain({ data: [draftRow], error: null });
+    fromMock.mockReturnValue(chain);
+
+    const result = await getProjectsForAdmin();
+
+    expect(fromMock).toHaveBeenCalledWith('projects');
+    // The admin must see drafts — the published filter must NOT be applied here.
+    expect(chain.eq).not.toHaveBeenCalled();
+    expect(result[0]!.is_published).toBe(false);
+  });
+
+  it('throws when supabase returns an error', async () => {
+    fromMock.mockReturnValue(
+      createListChain({ data: null, error: { message: 'boom' } }),
+    );
+
+    await expect(getProjectsForAdmin()).rejects.toEqual({ message: 'boom' });
+  });
+});
+
+describe('getProjectByIdForAdmin', () => {
+  it('fetches a draft by id without filtering on is_published', async () => {
+    const draftRow = {
+      ...baseProjectRow,
+      is_published: false,
+      screenshots: [],
+      project_technologies: [],
+    };
+    const chain = createSingleChain({ data: draftRow, error: null });
+    fromMock.mockReturnValue(chain);
+
+    const result = await getProjectByIdForAdmin('p1');
+
+    expect(chain.eq).toHaveBeenCalledWith('id', 'p1');
+    expect(chain.eq).not.toHaveBeenCalledWith('is_published', true);
+    expect(result?.is_published).toBe(false);
+  });
+
+  it('returns null when the project does not exist', async () => {
+    fromMock.mockReturnValue(createSingleChain({ data: null, error: null }));
+
+    await expect(getProjectByIdForAdmin('missing')).resolves.toBeNull();
+  });
+
+  it('throws when supabase returns an error', async () => {
+    fromMock.mockReturnValue(
+      createSingleChain({ data: null, error: { message: 'nope' } }),
+    );
+
+    await expect(getProjectByIdForAdmin('p1')).rejects.toEqual({
+      message: 'nope',
+    });
   });
 });

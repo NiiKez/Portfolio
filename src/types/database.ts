@@ -39,6 +39,7 @@ export type Database = {
           live_url: string | null;
           demo_video_path: string | null;
           demo_video_poster_path: string | null;
+          is_published: boolean;
           sort_order: number;
           created_at: string;
           updated_at: string;
@@ -51,6 +52,7 @@ export type Database = {
           live_url?: string | null;
           demo_video_path?: string | null;
           demo_video_poster_path?: string | null;
+          is_published?: boolean;
           sort_order?: number;
           created_at?: string;
           updated_at?: string;
@@ -63,6 +65,7 @@ export type Database = {
           live_url?: string | null;
           demo_video_path?: string | null;
           demo_video_poster_path?: string | null;
+          is_published?: boolean;
           sort_order?: number;
           created_at?: string;
           updated_at?: string;
@@ -272,6 +275,7 @@ export type Database = {
           p_github_url: string | null;
           p_live_url: string | null;
           p_technology_ids: string[];
+          p_is_published: boolean;
         };
         Returns: Database['portfolio']['Tables']['projects']['Row'];
       };

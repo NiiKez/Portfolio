@@ -35,6 +35,10 @@ export function ProjectForm({ project, allSkills }: ProjectFormProps) {
   const [description, setDescription] = useState(project?.description ?? '');
   const [githubUrl, setGithubUrl] = useState(project?.github_url ?? '');
   const [liveUrl, setLiveUrl] = useState(project?.live_url ?? '');
+  // New projects start as a private draft; editing keeps the current state.
+  const [isPublished, setIsPublished] = useState(
+    project?.is_published ?? false,
+  );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
     new Set(project?.technologies.map((t) => t.id) ?? []),
   );
@@ -65,6 +69,7 @@ export function ProjectForm({ project, allSkills }: ProjectFormProps) {
       description,
       github_url: githubUrl,
       live_url: liveUrl,
+      is_published: isPublished,
       technology_ids: Array.from(selectedIds),
     });
 
@@ -226,6 +231,31 @@ export function ProjectForm({ project, allSkills }: ProjectFormProps) {
             })}
           </div>
         )}
+      </div>
+
+      <div className="rounded-lg border border-border p-4">
+        <label
+          htmlFor="project-published"
+          className="flex cursor-pointer items-start gap-3"
+        >
+          <input
+            id="project-published"
+            type="checkbox"
+            checked={isPublished}
+            onChange={(e) => setIsPublished(e.target.checked)}
+            disabled={isPending}
+            className="mt-0.5 size-4 shrink-0 accent-primary"
+          />
+          <span>
+            <span className="text-base font-medium">Published</span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              When off, this project is a private draft — visible only to you
+              here in the admin and hidden from the public site (and its direct
+              URL). Turn it on to make it live on{' '}
+              <span className="font-mono">/projects</span>.
+            </span>
+          </span>
+        </label>
       </div>
 
       {isEditing && project ? (

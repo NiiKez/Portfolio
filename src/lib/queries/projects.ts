@@ -1,9 +1,11 @@
 import 'server-only';
 
 import { cache } from 'react';
-import type { QueryData } from '@supabase/supabase-js';
+import type { QueryData, SupabaseClient } from '@supabase/supabase-js';
 
 import { createPublicClient } from '@/lib/supabase/public';
+import { createClient } from '@/lib/supabase/server';
+import type { Database } from '@/types/database';
 import type { ProjectWithDetails, Skill } from '@/types';
 
 const PROJECT_SELECT = `
@@ -13,8 +15,10 @@ const PROJECT_SELECT = `
 ` as const;
 
 // Derive the row shape straight from the schema-typed query, so it stays in
-// sync with the DB types automatically instead of a hand-written cast.
-const projectDetailQuery = (client: ReturnType<typeof createPublicClient>) =>
+// sync with the DB types automatically instead of a hand-written cast. Typed
+// against the shared SupabaseClient so it works for both the public (anon) and
+// authenticated (admin) clients.
+const projectDetailQuery = (client: SupabaseClient<Database, 'portfolio'>) =>
   client.from('projects').select(PROJECT_SELECT);
 
 type ProjectRow = QueryData<ReturnType<typeof projectDetailQuery>>[number];
@@ -42,6 +46,7 @@ function mapRow(row: ProjectRow): ProjectWithDetails {
     live_url: row.live_url,
     demo_video_path: row.demo_video_path,
     demo_video_poster_path: row.demo_video_poster_path,
+    is_published: row.is_published,
     sort_order: row.sort_order,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -59,6 +64,10 @@ export const getProjects = cache(async (): Promise<ProjectWithDetails[]> => {
   const supabase = createPublicClient();
 
   const { data, error } = await projectDetailQuery(supabase)
+    // Public surface: published only. RLS (`public_read`) already enforces this
+    // on the anon key; the explicit filter is defence-in-depth and keeps the
+    // intent visible at the call site.
+    .eq('is_published', true)
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true });
 
@@ -77,6 +86,7 @@ export const getFeaturedProjects = cache(
     const supabase = createPublicClient();
 
     const { data, error } = await projectDetailQuery(supabase)
+      .eq('is_published', true)
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: true })
       .limit(limit);
@@ -89,6 +99,42 @@ export const getFeaturedProjects = cache(
 export const getProjectById = cache(
   async (id: string): Promise<ProjectWithDetails | null> => {
     const supabase = createPublicClient();
+
+    const { data, error } = await projectDetailQuery(supabase)
+      .eq('id', id)
+      // A draft must 404 on its direct public URL too, not just the listing.
+      .eq('is_published', true)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) return null;
+    return mapRow(data);
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Admin-only variants — read EVERY project (drafts included) via the
+// authenticated server client. The admin sees drafts through the `admin_write`
+// RLS policy (FOR ALL / is_admin()), which Postgres OR-combines with the
+// published-only `public_read` policy; these deliberately carry NO
+// `is_published` filter. Never use them on a public surface.
+
+export const getProjectsForAdmin = cache(
+  async (): Promise<ProjectWithDetails[]> => {
+    const supabase = await createClient();
+
+    const { data, error } = await projectDetailQuery(supabase)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    return (data ?? []).map(mapRow);
+  },
+);
+
+export const getProjectByIdForAdmin = cache(
+  async (id: string): Promise<ProjectWithDetails | null> => {
+    const supabase = await createClient();
 
     const { data, error } = await projectDetailQuery(supabase)
       .eq('id', id)

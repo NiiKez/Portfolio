@@ -47,6 +47,14 @@ export type Project = {
    * captured from a video frame. Null = show the video's own first frame.
    */
   demo_video_poster_path: string | null;
+  /**
+   * Draft/publish gate. `false` = a private draft visible only to the admin
+   * (hidden from the public site and direct URLs); `true` = live on `/projects`.
+   * New projects default to draft. Enforced by RLS — see the `public_read`
+   * policy in `20260621000000_project_publish_flag` — with an app-layer
+   * `.eq('is_published', true)` on the public queries as defence-in-depth.
+   */
+  is_published: boolean;
   sort_order: number;
   created_at: string;
   updated_at: string;

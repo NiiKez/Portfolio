@@ -112,6 +112,7 @@ export const updateProject = safeAction<UpdateProjectInput, Project>({
         p_github_url: fields.github_url,
         p_live_url: fields.live_url,
         p_technology_ids: technology_ids,
+        p_is_published: fields.is_published,
       },
     );
 

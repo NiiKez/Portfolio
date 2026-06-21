@@ -69,6 +69,7 @@ const existingProject: ProjectWithDetails = {
   live_url: 'https://existing.example.com',
   demo_video_path: null,
   demo_video_poster_path: null,
+  is_published: true,
   sort_order: 0,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
@@ -202,10 +203,35 @@ describe('ProjectForm (create mode)', () => {
       description: 'A description',
       github_url: null,
       live_url: null,
+      is_published: false,
       technology_ids: [skillUuid1],
     });
     expect(toastSuccess).toHaveBeenCalledWith('Project created');
     expect(pushMock).toHaveBeenCalledWith('/admin/projects');
+  });
+
+  it('defaults the Published toggle off and sends is_published: true once checked', async () => {
+    createProjectMock.mockResolvedValue({
+      success: true,
+      data: { id: 'new-id' },
+    });
+    const user = userEvent.setup();
+    render(<ProjectForm allSkills={allSkills} />);
+
+    // New projects start as a private draft.
+    expect(screen.getByRole('checkbox')).not.toBeChecked();
+
+    await user.type(screen.getByLabelText('Title'), 'My Project');
+    await user.type(screen.getByLabelText('Description'), 'A description');
+    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('button', { name: 'Create project' }));
+
+    await waitFor(() => {
+      expect(createProjectMock).toHaveBeenCalledTimes(1);
+    });
+    expect(createProjectMock.mock.calls[0]?.[0]).toMatchObject({
+      is_published: true,
+    });
   });
 
   it('toggles a technology off when clicked twice before submitting', async () => {
@@ -351,6 +377,8 @@ describe('ProjectForm (edit mode)', () => {
       'aria-pressed',
       'false',
     );
+    // The Published toggle reflects the existing project's state.
+    expect(screen.getByRole('checkbox')).toBeChecked();
     expect(
       screen.getByRole('button', { name: 'Save changes' }),
     ).toBeInTheDocument();

@@ -42,10 +42,13 @@ type SupabaseResult = {
   error: { message: string } | null;
 };
 
-// .select().order().order() resolves (getProjects / getSkills / getExperiences).
+// .select().eq?().order().order() resolves (getProjects / getSkills /
+// getExperiences). `eq` is a no-op passthrough for the loaders that don't call
+// it (skills/experiences); getProjects uses it for the is_published filter.
 function createListChain(result: SupabaseResult) {
   const chain: Record<string, unknown> = {};
   chain.select = vi.fn(() => chain);
+  chain.eq = vi.fn(() => chain);
   let orderCalls = 0;
   chain.order = vi.fn(() => {
     orderCalls += 1;

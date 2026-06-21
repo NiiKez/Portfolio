@@ -27,6 +27,7 @@ const makeProject = (
   live_url: null,
   demo_video_path: null,
   demo_video_poster_path: null,
+  is_published: true,
   sort_order: 0,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
