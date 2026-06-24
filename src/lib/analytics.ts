@@ -18,6 +18,22 @@ const MAX_PATH_LENGTH = 1024;
 const MAX_REFERRER_LENGTH = 255;
 
 /**
+ * RFC-4122 UUID shape (any version), matching the `z.uuid()` gate the
+ * `/projects/[id]` route applies before it renders — a non-UUID id 404s there,
+ * so only this shape is ever a real project-detail page.
+ */
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The site's fixed set of static public routes (everything else is `/projects/{id}`). */
+const STATIC_PUBLIC_ROUTES = new Set(['/', '/about', '/projects']);
+
+// Drop a single trailing slash (except the root) so `/about/` matches `/about`.
+function stripTrailingSlash(path: string): string {
+  return path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
+}
+
+/**
  * Whether a route should be recorded. We never track the admin UI (it's the
  * owner browsing their own CMS) or API noise — only public visitor paths.
  */
@@ -32,6 +48,43 @@ export function isTrackablePath(path: string): boolean {
     !/^\/[/\\]/.test(path) &&
     !path.startsWith('/admin') &&
     !path.startsWith('/api')
+  );
+}
+
+/**
+ * Extract the project id from a `/projects/{uuid}` detail path, or `null` if the
+ * path isn't a project-detail route. The ingest uses this to confirm the project
+ * actually exists before counting the view, so a probe at a fake or deleted id
+ * (e.g. the all-zeros UUID that scanners love) doesn't inflate the numbers.
+ */
+export function projectIdFromPath(path: string): string | null {
+  const normalized = stripTrailingSlash(path);
+  if (!normalized.startsWith('/projects/')) return null;
+  const id = normalized.slice('/projects/'.length);
+  return UUID_RE.test(id) ? id : null;
+}
+
+/**
+ * Whether a path is one of the site's ACTUAL public routes. The portfolio has a
+ * small, fixed route set, so anything outside it — `/cmd_sco`, `/.env`,
+ * `/wp-login.php`, and the rest of the automated-scanner probes that hit any
+ * public host within minutes of going live — is not a real page view and must
+ * not inflate the admin traffic counts.
+ *
+ * This is a tighter gate than `isTrackablePath` (which only strips admin/api and
+ * non-relative junk): a path must match a known route SHAPE. `/projects/{id}`
+ * still requires a real UUID, mirroring the route's own `z.uuid()` guard (the
+ * page 404s on a non-UUID id). Whether that project actually EXISTS is verified
+ * server-side in the ingest — this validates the shape only.
+ *
+ * NOTE: this is an allowlist. When a new public route is added, list it here (in
+ * `STATIC_PUBLIC_ROUTES`) or its views will not be counted.
+ */
+export function isKnownPublicRoute(path: string): boolean {
+  if (!isTrackablePath(path)) return false;
+  const normalized = stripTrailingSlash(path);
+  return (
+    STATIC_PUBLIC_ROUTES.has(normalized) || projectIdFromPath(path) !== null
   );
 }
 

@@ -68,6 +68,14 @@ describe('PageViewTracker', () => {
     expect(sendBeaconMock).not.toHaveBeenCalled();
   });
 
+  it('does not beacon a scanner-probe path outside the known route shape', () => {
+    pathnameMock.mockReturnValue('/cmd_sco');
+
+    render(<PageViewTracker />);
+
+    expect(sendBeaconMock).not.toHaveBeenCalled();
+  });
+
   it('does not re-beacon when re-rendered on the same path', () => {
     const { rerender } = render(<PageViewTracker />);
     rerender(<PageViewTracker />);

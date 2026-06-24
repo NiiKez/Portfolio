@@ -3,7 +3,7 @@
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 
-import { TRACK_ENDPOINT, isTrackablePath } from '@/lib/analytics';
+import { TRACK_ENDPOINT, isKnownPublicRoute } from '@/lib/analytics';
 
 /**
  * Fires one privacy-friendly page-view beacon per client-side navigation.
@@ -22,7 +22,9 @@ export function PageViewTracker() {
   const firstFire = useRef(true);
 
   useEffect(() => {
-    if (!pathname || !isTrackablePath(pathname)) return;
+    // Only beacon the site's real routes — a 404/scanner-probe path (`/cmd_sco`
+    // …) never reaches the server, and the ingest re-checks authoritatively.
+    if (!pathname || !isKnownPublicRoute(pathname)) return;
     if (lastPath.current === pathname) return;
     lastPath.current = pathname;
 

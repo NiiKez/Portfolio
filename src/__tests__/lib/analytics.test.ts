@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  isKnownPublicRoute,
   isTrackablePath,
   parsePageViewSummary,
+  projectIdFromPath,
   sanitizePath,
   sanitizeReferrer,
 } from '@/lib/analytics';
+
+const UUID = '9712e2a6-e7b8-49fa-a82d-912c70e85c28';
 
 describe('isTrackablePath', () => {
   it('accepts public relative paths', () => {
@@ -26,6 +30,54 @@ describe('isTrackablePath', () => {
     expect(isTrackablePath('//evil.test')).toBe(false);
     expect(isTrackablePath('//evil.test/path')).toBe(false);
     expect(isTrackablePath('/\\evil.test')).toBe(false);
+  });
+});
+
+describe('projectIdFromPath', () => {
+  it('returns the UUID for a project-detail path', () => {
+    expect(projectIdFromPath(`/projects/${UUID}`)).toBe(UUID);
+    // Tolerates a trailing slash.
+    expect(projectIdFromPath(`/projects/${UUID}/`)).toBe(UUID);
+  });
+
+  it('returns null for the listing, static, and non-UUID project paths', () => {
+    expect(projectIdFromPath('/projects')).toBeNull();
+    expect(projectIdFromPath('/about')).toBeNull();
+    expect(projectIdFromPath('/projects/not-a-uuid')).toBeNull();
+    expect(projectIdFromPath('/projects/123')).toBeNull();
+  });
+});
+
+describe('isKnownPublicRoute', () => {
+  it('accepts the fixed static routes', () => {
+    expect(isKnownPublicRoute('/')).toBe(true);
+    expect(isKnownPublicRoute('/about')).toBe(true);
+    expect(isKnownPublicRoute('/projects')).toBe(true);
+    // A trailing slash on a static route still matches.
+    expect(isKnownPublicRoute('/about/')).toBe(true);
+  });
+
+  it('accepts a project-detail path with a real UUID', () => {
+    expect(isKnownPublicRoute(`/projects/${UUID}`)).toBe(true);
+    // The all-zeros UUID is shape-valid here; existence is checked server-side.
+    expect(
+      isKnownPublicRoute('/projects/00000000-0000-4000-8000-000000000000'),
+    ).toBe(true);
+  });
+
+  it('rejects scanner-probe and non-route paths', () => {
+    expect(isKnownPublicRoute('/cmd_sco')).toBe(false);
+    expect(isKnownPublicRoute('/.env')).toBe(false);
+    expect(isKnownPublicRoute('/wp-login.php')).toBe(false);
+    expect(isKnownPublicRoute('/projects/not-a-uuid')).toBe(false);
+    expect(isKnownPublicRoute('/about/extra')).toBe(false);
+  });
+
+  it('rejects admin, api, and non-relative paths (inherits isTrackablePath)', () => {
+    expect(isKnownPublicRoute('/admin')).toBe(false);
+    expect(isKnownPublicRoute('/api/track')).toBe(false);
+    expect(isKnownPublicRoute('//evil.test')).toBe(false);
+    expect(isKnownPublicRoute('projects')).toBe(false);
   });
 });
 

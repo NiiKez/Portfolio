@@ -2,8 +2,15 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 
 import { isAdminEmail } from '@/lib/admin-email';
-import { sanitizePath, sanitizeReferrer } from '@/lib/analytics';
+import {
+  isKnownPublicRoute,
+  projectIdFromPath,
+  sanitizePath,
+  sanitizeReferrer,
+} from '@/lib/analytics';
+import { isBotUserAgent } from '@/lib/bot-filter';
 import { getClientIp } from '@/lib/client-ip';
+import { isPublishedProject } from '@/lib/queries/projects';
 import { rateLimit } from '@/lib/rate-limit';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
@@ -85,6 +92,15 @@ export async function POST(request: NextRequest) {
   const path = sanitizePath(parsed.data.path);
   if (!path) return noContent();
 
+  // Scanner / crawler filter — keep the counts to organic human visits. Two
+  // cheap, no-DB drops first:
+  //  - a User-Agent that self-identifies as a bot/scanner/HTTP-library, even on
+  //    a real route (keeps the homepage count clean);
+  //  - any path outside the site's known route SHAPE (`/cmd_sco`, `/.env`, …) —
+  //    the automated-probe noise that floods every public host.
+  if (isBotUserAgent(request.headers.get('user-agent'))) return noContent();
+  if (!isKnownPublicRoute(path)) return noContent();
+
   // Don't record the owner's own browsing — the admin viewing their own public
   // pages is not organic traffic. The Supabase auth cookie rides along on the
   // same-origin beacon, so we can identify the session here. Skip the lookup
@@ -104,6 +120,19 @@ export async function POST(request: NextRequest) {
     }
   } catch {
     // Fail open: an auth lookup failure must never break the quiet contract.
+  }
+
+  // A `/projects/{uuid}` path can pass the shape gate yet still be a probe at a
+  // fake, deleted, or draft id (the page 404s for visitors). Count it only when
+  // the project really exists on the public surface. Fail OPEN on a lookup error
+  // — never drop a real visitor's view over a transient DB hiccup.
+  const projectId = projectIdFromPath(path);
+  if (projectId) {
+    try {
+      if (!(await isPublishedProject(projectId))) return noContent();
+    } catch {
+      // Fail open: count the view rather than lose it.
+    }
   }
 
   const referrer = sanitizeReferrer(parsed.data.referrer, host);
