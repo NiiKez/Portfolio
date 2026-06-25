@@ -96,6 +96,31 @@ export const getFeaturedProjects = cache(
   },
 );
 
+/**
+ * Lightweight existence check for the analytics ingest: is there a PUBLISHED
+ * project with this id? Used to drop scanner probes at fake / deleted / draft
+ * ids (e.g. the all-zeros UUID) before they count as a `/projects/{id}` view —
+ * without loading the full project (screenshots + technologies) just to count
+ * one. Runs on the anon `public_read` path, so it sees exactly what a visitor
+ * could: a draft or unknown id reads as nonexistent. Not request-`cache()`d —
+ * the ingest checks one id per request.
+ */
+export async function isPublishedProject(id: string): Promise<boolean> {
+  const supabase = createPublicClient();
+
+  const { data, error } = await supabase
+    .from('projects')
+    .select('id')
+    .eq('id', id)
+    // Defence-in-depth: RLS `public_read` already restricts the anon key to
+    // published rows; the explicit filter keeps the intent visible here too.
+    .eq('is_published', true)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data !== null;
+}
+
 export const getProjectById = cache(
   async (id: string): Promise<ProjectWithDetails | null> => {
     const supabase = createPublicClient();

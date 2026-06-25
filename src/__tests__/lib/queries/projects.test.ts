@@ -24,6 +24,7 @@ import {
   getProjectByIdForAdmin,
   getProjects,
   getProjectsForAdmin,
+  isPublishedProject,
 } from '@/lib/queries/projects';
 
 type SupabaseResult = {
@@ -307,6 +308,33 @@ describe('getProjectById', () => {
     );
 
     await expect(getProjectById('p1')).rejects.toEqual({ message: 'nope' });
+  });
+});
+
+describe('isPublishedProject', () => {
+  it('returns true when a published row with that id exists', async () => {
+    const chain = createSingleChain({ data: { id: 'p1' }, error: null });
+    fromMock.mockReturnValue(chain);
+
+    await expect(isPublishedProject('p1')).resolves.toBe(true);
+    expect(fromMock).toHaveBeenCalledWith('projects');
+    expect(chain.eq).toHaveBeenCalledWith('id', 'p1');
+    // Only counts published projects — a draft id reads as nonexistent.
+    expect(chain.eq).toHaveBeenCalledWith('is_published', true);
+  });
+
+  it('returns false when no published row matches (fake / deleted / draft id)', async () => {
+    fromMock.mockReturnValue(createSingleChain({ data: null, error: null }));
+
+    await expect(isPublishedProject('missing')).resolves.toBe(false);
+  });
+
+  it('throws when supabase returns an error (ingest fails open on this)', async () => {
+    fromMock.mockReturnValue(
+      createSingleChain({ data: null, error: { message: 'boom' } }),
+    );
+
+    await expect(isPublishedProject('p1')).rejects.toEqual({ message: 'boom' });
   });
 });
 

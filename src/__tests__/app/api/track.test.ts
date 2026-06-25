@@ -24,7 +24,14 @@ vi.mock('@/lib/admin-email', () => ({
   isAdminEmail: (...args: unknown[]) => isAdminEmailMock(...args),
 }));
 
+const isPublishedProjectMock = vi.fn();
+vi.mock('@/lib/queries/projects', () => ({
+  isPublishedProject: (...args: unknown[]) => isPublishedProjectMock(...args),
+}));
+
 import { POST } from '@/app/api/track/route';
+
+const UUID = '9712e2a6-e7b8-49fa-a82d-912c70e85c28';
 
 function makeRequest(
   body: string | null,
@@ -60,6 +67,7 @@ beforeEach(() => {
   insertMock.mockResolvedValue({ error: null });
   getUserMock.mockResolvedValue({ data: { user: null } });
   isAdminEmailMock.mockReturnValue(false);
+  isPublishedProjectMock.mockResolvedValue(true);
 });
 
 describe('POST /api/track', () => {
@@ -260,6 +268,77 @@ describe('POST /api/track', () => {
 
     expect(res.status).toBe(204);
     expect(fromMock).not.toHaveBeenCalled();
+  });
+
+  it('drops a request with a bot/scanner User-Agent without inserting', async () => {
+    const res = await POST(
+      makeRequest(JSON.stringify({ path: '/' }), {
+        'user-agent': 'curl/8.6.0',
+      }),
+    );
+
+    expect(res.status).toBe(204);
+    expect(fromMock).not.toHaveBeenCalled();
+  });
+
+  it('records a request from a normal browser User-Agent', async () => {
+    const res = await POST(
+      makeRequest(JSON.stringify({ path: '/' }), {
+        'user-agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      }),
+    );
+
+    expect(res.status).toBe(204);
+    expect(fromMock).toHaveBeenCalledWith('page_views');
+  });
+
+  it('drops a path outside the known route shape (scanner probe)', async () => {
+    const res = await POST(makeRequest(JSON.stringify({ path: '/cmd_sco' })));
+
+    expect(res.status).toBe(204);
+    expect(fromMock).not.toHaveBeenCalled();
+  });
+
+  it('records a project-detail view when the project exists and is published', async () => {
+    isPublishedProjectMock.mockResolvedValue(true);
+
+    const res = await POST(
+      makeRequest(JSON.stringify({ path: `/projects/${UUID}` })),
+    );
+
+    expect(res.status).toBe(204);
+    expect(isPublishedProjectMock).toHaveBeenCalledWith(UUID);
+    expect(insertMock).toHaveBeenCalledWith({
+      path: `/projects/${UUID}`,
+      referrer: null,
+    });
+  });
+
+  it('drops a project-detail view at a nonexistent id (e.g. the all-zeros UUID)', async () => {
+    isPublishedProjectMock.mockResolvedValue(false);
+
+    const res = await POST(
+      makeRequest(
+        JSON.stringify({
+          path: '/projects/00000000-0000-4000-8000-000000000000',
+        }),
+      ),
+    );
+
+    expect(res.status).toBe(204);
+    expect(fromMock).not.toHaveBeenCalled();
+  });
+
+  it('fails open (records) when the project existence lookup throws', async () => {
+    isPublishedProjectMock.mockRejectedValue(new Error('db down'));
+
+    const res = await POST(
+      makeRequest(JSON.stringify({ path: `/projects/${UUID}` })),
+    );
+
+    expect(res.status).toBe(204);
+    expect(fromMock).toHaveBeenCalledWith('page_views');
   });
 
   it('swallows a storage failure and still returns 204', async () => {
