@@ -2,6 +2,9 @@ version: 2
 updates:
   # npm dependencies — version updates (security updates are handled separately
   # by Dependabot security updates, enabled in repo settings).
+  # NOTE: the committed /.npmrc (registry=https://registry.npmjs.org/) is
+  # required here — the npm updater auto-injects an npm.pkg.github.com
+  # credential and otherwise aborts with private_registry_config_not_found.
   - package-ecosystem: npm
     directory: '/'
     schedule:
