@@ -1,49 +1,50 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Sparkles, FolderKanban, Briefcase, BarChart3 } from 'lucide-react';
+import {
+  Sparkles,
+  FolderKanban,
+  Briefcase,
+  BarChart3,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+} from 'lucide-react';
 
-import { parsePageViewSummary, type PageViewRow } from '@/lib/analytics';
+import {
+  RankedList,
+  type RankedListItem,
+} from '@/components/admin/ranked-list';
+import { TrafficChart } from '@/components/admin/traffic-chart';
+import {
+  parsePageViewSummary,
+  averagePerDay,
+  busiestDay,
+  trafficTrend,
+  humanizePath,
+  faviconUrl,
+} from '@/lib/analytics';
 import { profile } from '@/lib/profile';
 import { createClient } from '@/lib/supabase/server';
+import { cn } from '@/lib/utils';
 
 export const metadata: Metadata = {
   title: 'Admin Dashboard',
 };
-
-/** A ranked `label → views` list (top 8) shared by the Traffic card columns. */
-function RankedList({ rows, mono }: { rows: PageViewRow[]; mono?: boolean }) {
-  return (
-    <ul className="space-y-2">
-      {rows.slice(0, 8).map((row) => (
-        <li
-          key={row.label}
-          className="flex items-center justify-between gap-4 text-sm"
-        >
-          <span
-            className={`truncate text-foreground${mono ? ' font-mono' : ''}`}
-          >
-            {row.label}
-          </span>
-          <span className="shrink-0 tabular-nums text-muted-foreground">
-            {row.views.toLocaleString()}
-          </span>
-        </li>
-      ))}
-    </ul>
-  );
-}
 
 export default async function AdminDashboardPage() {
   const supabase = await createClient();
 
   const [
     { count: skillCount },
-    { count: projectCount },
+    { count: projectCount, data: projectRows },
     { count: experienceCount },
     { data: analyticsData },
   ] = await Promise.all([
     supabase.from('skills').select('*', { count: 'exact', head: true }),
-    supabase.from('projects').select('*', { count: 'exact', head: true }),
+    // Fetch rows AND count in one round-trip: the count drives the stat card and
+    // the rows build the title map that humanizes `/projects/{uuid}` traffic. The
+    // authenticated/admin client sees every project (incl. drafts) — correct here.
+    supabase.from('projects').select('id, title', { count: 'exact' }),
     supabase.from('experiences').select('*', { count: 'exact', head: true }),
     // Admin-only SECURITY DEFINER RPC; resolves to an error (→ null) until the
     // page-view migration is applied, which the summary parser tolerates.
@@ -54,6 +55,52 @@ export default async function AdminDashboardPage() {
   const projects = projectCount ?? 0;
   const experiences = experienceCount ?? 0;
   const analytics = parsePageViewSummary(analyticsData);
+
+  const projectTitles = new Map<string, string>(
+    (projectRows ?? []).map((p) => [p.id as string, p.title as string]),
+  );
+
+  const trend = trafficTrend(analytics.total, analytics.previousTotal);
+  const avgPerDay = averagePerDay(analytics);
+  const busiest = busiestDay(analytics.daily);
+
+  const pageItems: RankedListItem[] = analytics.topPaths.map((row) => {
+    const label = humanizePath(row.label, projectTitles);
+    const resolved = label !== row.label;
+    return { label, views: row.views, sub: resolved ? row.label : undefined };
+  });
+  const referrerItems: RankedListItem[] = analytics.topReferrers.map((row) => ({
+    label: row.label,
+    views: row.views,
+    href: `https://${row.label}`,
+    iconUrl: faviconUrl(row.label),
+  }));
+
+  // Trend badge presentation, keyed off direction (null → no badge).
+  const TrendIcon =
+    trend === null
+      ? null
+      : trend.direction === 'up'
+        ? TrendingUp
+        : trend.direction === 'down'
+          ? TrendingDown
+          : Minus;
+  const trendClass =
+    trend === null
+      ? ''
+      : trend.direction === 'up'
+        ? 'bg-emerald-500/10 text-emerald-500'
+        : trend.direction === 'down'
+          ? 'bg-red-500/10 text-red-500'
+          : 'bg-muted-foreground/10 text-muted-foreground';
+
+  const busiestLabel = busiest
+    ? `${new Date(`${busiest.date}T00:00:00Z`).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        timeZone: 'UTC',
+      })} · ${busiest.views}`
+    : '—';
 
   const stats = [
     {
@@ -115,39 +162,76 @@ export default async function AdminDashboardPage() {
           </span>
         </div>
 
-        <p className="mb-8 text-[2rem] font-normal tabular-nums leading-none">
-          {analytics.total.toLocaleString()}
-          <span className="ml-2 align-middle text-sm text-muted-foreground">
-            page views
-          </span>
-        </p>
+        <div className="mb-8 flex flex-wrap items-center gap-3">
+          <p className="text-[2rem] font-normal tabular-nums leading-none">
+            {analytics.total.toLocaleString()}
+            <span className="ml-2 align-middle text-sm text-muted-foreground">
+              page views
+            </span>
+          </p>
+          {trend && TrendIcon && (
+            <span
+              className={cn(
+                'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-sm tabular-nums',
+                trendClass,
+              )}
+            >
+              <TrendIcon className="size-3.5" />
+              {Math.abs(trend.pct)}%
+              <span className="text-muted-foreground">
+                vs prev {analytics.days || 30}d
+              </span>
+            </span>
+          )}
+        </div>
 
         {analytics.total === 0 ? (
           <p className="text-sm text-muted-foreground">
             No page views recorded yet.
           </p>
         ) : (
-          <div className="grid gap-8 sm:grid-cols-2">
-            <div>
-              <h4 className="mb-3 text-sm font-medium text-muted-foreground">
-                Top pages
-              </h4>
-              <RankedList rows={analytics.topPaths} mono />
+          <>
+            <div className="mb-6 flex flex-wrap gap-x-8 gap-y-2 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">Avg / day</span>
+                <span className="font-medium tabular-nums">
+                  {avgPerDay.toLocaleString()}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">Busiest day</span>
+                <span className="font-medium tabular-nums">{busiestLabel}</span>
+              </div>
             </div>
 
-            <div>
-              <h4 className="mb-3 text-sm font-medium text-muted-foreground">
-                Top referrers
-              </h4>
-              {analytics.topReferrers.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No external referrers yet.
-                </p>
-              ) : (
-                <RankedList rows={analytics.topReferrers} />
-              )}
+            {analytics.daily.length > 0 && (
+              <div className="mb-8">
+                <TrafficChart data={analytics.daily} />
+              </div>
+            )}
+
+            <div className="grid gap-8 sm:grid-cols-2">
+              <div>
+                <h4 className="mb-3 text-sm font-medium text-muted-foreground">
+                  Top pages
+                </h4>
+                <RankedList items={pageItems} />
+              </div>
+
+              <div>
+                <h4 className="mb-3 text-sm font-medium text-muted-foreground">
+                  Top referrers
+                </h4>
+                {referrerItems.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No external referrers yet.
+                  </p>
+                ) : (
+                  <RankedList items={referrerItems} />
+                )}
+              </div>
             </div>
-          </div>
+          </>
         )}
       </div>
 
