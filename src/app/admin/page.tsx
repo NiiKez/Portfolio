@@ -99,7 +99,7 @@ export default async function AdminDashboardPage() {
         month: 'short',
         day: 'numeric',
         timeZone: 'UTC',
-      })} · ${busiest.views}`
+      })} · ${busiest.views} ${busiest.views === 1 ? 'view' : 'views'}`
     : '—';
 
   const stats = [
