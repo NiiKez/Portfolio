@@ -144,12 +144,17 @@ export function sanitizeReferrer(
 /** One ranked `{ label, views }` row in the dashboard summary. */
 export type PageViewRow = { label: string; views: number };
 
+/** One day of the traffic sparkline — an ISO `YYYY-MM-DD` date and its count. */
+export type DailyViews = { date: string; views: number };
+
 /** Parsed shape of the `portfolio.page_view_summary` RPC result. */
 export type PageViewSummary = {
   days: number;
   total: number;
+  previousTotal: number;
   topPaths: PageViewRow[];
   topReferrers: PageViewRow[];
+  daily: DailyViews[];
 };
 
 function toRows(value: unknown, key: 'path' | 'referrer'): PageViewRow[] {
@@ -167,11 +172,32 @@ function toRows(value: unknown, key: 'path' | 'referrer'): PageViewRow[] {
   return rows;
 }
 
+// Coerce the RPC's `daily` series the same way `toRows` does its rows: skip any
+// entry that isn't a `{ date: string, views: number }` object, preserving the
+// (chronological) order the RPC sends. An absent/non-array value is an empty
+// series, never a throw.
+function toDaily(value: unknown): DailyViews[] {
+  if (!Array.isArray(value)) return [];
+  const rows: DailyViews[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const record = item as Record<string, unknown>;
+    const date = record.date;
+    const views = record.views;
+    if (typeof date === 'string' && typeof views === 'number') {
+      rows.push({ date, views });
+    }
+  }
+  return rows;
+}
+
 /**
  * Defensively coerce the JSON returned by `page_view_summary` into a typed
  * summary. The RPC is hand-written SQL, so this tolerates a missing/shape-
  * shifted payload (e.g. before the migration is applied) by returning zeros and
- * empty lists rather than throwing in the dashboard render.
+ * empty lists rather than throwing in the dashboard render. The `previous_total`
+ * and `daily` fields are newer additions, so an older/unmigrated RPC that omits
+ * them defaults to `0` / `[]`.
  */
 export function parsePageViewSummary(raw: unknown): PageViewSummary {
   const record =
@@ -179,7 +205,92 @@ export function parsePageViewSummary(raw: unknown): PageViewSummary {
   return {
     days: typeof record.days === 'number' ? record.days : 0,
     total: typeof record.total === 'number' ? record.total : 0,
+    previousTotal:
+      typeof record.previous_total === 'number' ? record.previous_total : 0,
     topPaths: toRows(record.top_paths, 'path'),
     topReferrers: toRows(record.top_referrers, 'referrer'),
+    daily: toDaily(record.daily),
   };
+}
+
+/** Friendly labels for the site's fixed static routes in the dashboard list. */
+const STATIC_PATH_LABELS = new Map<string, string>([
+  ['/', 'Home'],
+  ['/about', 'About'],
+  ['/projects', 'Projects'],
+]);
+
+/**
+ * Mean page views per day over the window, rounded to one decimal place.
+ * Returns `0` for a non-positive day count so an absent/zeroed window can't
+ * divide by zero in the dashboard.
+ */
+export function averagePerDay(summary: {
+  total: number;
+  days: number;
+}): number {
+  if (summary.days <= 0) return 0;
+  return Math.round((summary.total / summary.days) * 10) / 10;
+}
+
+/**
+ * The single day with the most views, or `null` when there's nothing to rank —
+ * an empty series, or every day sitting at zero. Ties resolve to the earliest
+ * day (the first chronological peak wins), since the series arrives in order.
+ */
+export function busiestDay(daily: DailyViews[]): DailyViews | null {
+  let best: DailyViews | null = null;
+  for (const day of daily) {
+    // Strict `>` keeps the earliest of any tie, and the `> 0` floor means an
+    // all-zero series yields `null` rather than a spurious "busiest" day.
+    if (day.views > 0 && (best === null || day.views > best.views)) {
+      best = day;
+    }
+  }
+  return best;
+}
+
+/**
+ * Percentage change from the previous equal-length window to the current one,
+ * with a direction. Returns `null` when there's no positive baseline to compare
+ * against (the UI hides the trend rather than render `Infinity`/`NaN`). `pct` is
+ * signed — negative when traffic fell — so callers display `Math.abs(pct)` next
+ * to an arrow keyed off `direction`.
+ */
+export function trafficTrend(
+  total: number,
+  previousTotal: number,
+): { pct: number; direction: 'up' | 'down' | 'flat' } | null {
+  if (previousTotal <= 0) return null;
+  const pct = Math.round(((total - previousTotal) / previousTotal) * 100);
+  const direction =
+    total === previousTotal ? 'flat' : total > previousTotal ? 'up' : 'down';
+  return { pct, direction };
+}
+
+/**
+ * Turn a stored pathname into a human label for the dashboard's "Top pages"
+ * list. The fixed routes get friendly names; a `/projects/{uuid}` path resolves
+ * to the project title when known, and otherwise stays raw so an unknown/probe
+ * id is visibly distinct rather than silently relabelled. A single trailing
+ * slash is normalised the same way the tracking helpers do.
+ */
+export function humanizePath(
+  path: string,
+  projectTitles: Map<string, string>,
+): string {
+  const staticLabel = STATIC_PATH_LABELS.get(stripTrailingSlash(path));
+  if (staticLabel) return staticLabel;
+  const id = projectIdFromPath(path);
+  if (id) return projectTitles.get(id) ?? path;
+  return path;
+}
+
+/**
+ * A Google S2 favicon URL for a referrer host, used to brand the dashboard's
+ * "Top sources" rows. The host is encoded so it can't break out of the query
+ * string.
+ */
+export function faviconUrl(host: string): string {
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=32`;
 }

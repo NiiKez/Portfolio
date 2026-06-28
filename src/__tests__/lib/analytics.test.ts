@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  averagePerDay,
+  busiestDay,
+  faviconUrl,
+  humanizePath,
   isKnownPublicRoute,
   isTrackablePath,
   parsePageViewSummary,
   projectIdFromPath,
   sanitizePath,
   sanitizeReferrer,
+  trafficTrend,
 } from '@/lib/analytics';
 
 const UUID = '9712e2a6-e7b8-49fa-a82d-912c70e85c28';
@@ -172,30 +177,79 @@ describe('parsePageViewSummary', () => {
     const summary = parsePageViewSummary({
       days: 30,
       total: 123,
+      previous_total: 100,
       top_paths: [
         { path: '/', views: 80 },
         { path: '/projects', views: 43 },
       ],
       top_referrers: [{ referrer: 'google.com', views: 12 }],
+      daily: [
+        { date: '2026-06-01', views: 40 },
+        { date: '2026-06-02', views: 83 },
+      ],
     });
 
     expect(summary).toEqual({
       days: 30,
       total: 123,
+      previousTotal: 100,
       topPaths: [
         { label: '/', views: 80 },
         { label: '/projects', views: 43 },
       ],
       topReferrers: [{ label: 'google.com', views: 12 }],
+      daily: [
+        { date: '2026-06-01', views: 40 },
+        { date: '2026-06-02', views: 83 },
+      ],
     });
   });
 
   it('returns safe zeros/empties for null or malformed input', () => {
-    const empty = { days: 0, total: 0, topPaths: [], topReferrers: [] };
+    const empty = {
+      days: 0,
+      total: 0,
+      previousTotal: 0,
+      topPaths: [],
+      topReferrers: [],
+      daily: [],
+    };
     expect(parsePageViewSummary(null)).toEqual(empty);
     expect(parsePageViewSummary(undefined)).toEqual(empty);
     expect(parsePageViewSummary('nope')).toEqual(empty);
     expect(parsePageViewSummary({ total: 'x', top_paths: 'y' })).toEqual(empty);
+  });
+
+  it('defaults previous_total and daily when an older RPC omits them', () => {
+    const summary = parsePageViewSummary({
+      days: 7,
+      total: 9,
+      top_paths: [{ path: '/', views: 9 }],
+    });
+    expect(summary.previousTotal).toBe(0);
+    expect(summary.daily).toEqual([]);
+  });
+
+  it('skips malformed daily entries and keeps chronological order', () => {
+    const summary = parsePageViewSummary({
+      total: 12,
+      previous_total: 'oops', // wrong type -> default 0
+      daily: [
+        { date: '2026-06-01', views: 3 },
+        { date: '2026-06-02' }, // missing views
+        { views: 5 }, // missing date
+        { date: 2026, views: 5 }, // non-string date
+        { date: '2026-06-03', views: 'x' }, // non-number views
+        null,
+        'garbage',
+        { date: '2026-06-04', views: 9 },
+      ],
+    });
+    expect(summary.previousTotal).toBe(0);
+    expect(summary.daily).toEqual([
+      { date: '2026-06-01', views: 3 },
+      { date: '2026-06-04', views: 9 },
+    ]);
   });
 
   it('skips rows with the wrong shape', () => {
@@ -220,5 +274,117 @@ describe('parsePageViewSummary', () => {
       top_paths: [{ path: '/', views: -5 }],
     });
     expect(summary.topPaths).toEqual([{ label: '/', views: -5 }]);
+  });
+});
+
+describe('averagePerDay', () => {
+  it('divides total by days, rounded to one decimal', () => {
+    expect(averagePerDay({ total: 100, days: 30 })).toBe(3.3);
+    expect(averagePerDay({ total: 90, days: 30 })).toBe(3);
+    expect(averagePerDay({ total: 7, days: 2 })).toBe(3.5);
+  });
+
+  it('returns 0 for a non-positive day count (no divide by zero)', () => {
+    expect(averagePerDay({ total: 100, days: 0 })).toBe(0);
+    expect(averagePerDay({ total: 100, days: -5 })).toBe(0);
+  });
+});
+
+describe('busiestDay', () => {
+  it('returns the day with the most views', () => {
+    expect(
+      busiestDay([
+        { date: '2026-06-01', views: 3 },
+        { date: '2026-06-02', views: 9 },
+        { date: '2026-06-03', views: 5 },
+      ]),
+    ).toEqual({ date: '2026-06-02', views: 9 });
+  });
+
+  it('returns the earliest day on a tie', () => {
+    expect(
+      busiestDay([
+        { date: '2026-06-01', views: 4 },
+        { date: '2026-06-02', views: 7 },
+        { date: '2026-06-03', views: 7 },
+      ]),
+    ).toEqual({ date: '2026-06-02', views: 7 });
+  });
+
+  it('returns null for an empty or all-zero series', () => {
+    expect(busiestDay([])).toBeNull();
+    expect(
+      busiestDay([
+        { date: '2026-06-01', views: 0 },
+        { date: '2026-06-02', views: 0 },
+      ]),
+    ).toBeNull();
+  });
+});
+
+describe('trafficTrend', () => {
+  it('reports an upward trend with a positive pct', () => {
+    expect(trafficTrend(150, 100)).toEqual({ pct: 50, direction: 'up' });
+  });
+
+  it('reports a downward trend with a signed (negative) pct', () => {
+    expect(trafficTrend(75, 100)).toEqual({ pct: -25, direction: 'down' });
+  });
+
+  it('reports a flat trend when totals are equal', () => {
+    expect(trafficTrend(100, 100)).toEqual({ pct: 0, direction: 'flat' });
+  });
+
+  it('rounds the percentage to a whole number', () => {
+    expect(trafficTrend(133, 100)).toEqual({ pct: 33, direction: 'up' });
+  });
+
+  it('returns null when there is no positive baseline', () => {
+    expect(trafficTrend(50, 0)).toBeNull();
+    expect(trafficTrend(50, -10)).toBeNull();
+  });
+});
+
+describe('humanizePath', () => {
+  const titles = new Map([[UUID, 'My Cool Project']]);
+
+  it('maps the fixed static routes to friendly labels', () => {
+    expect(humanizePath('/', titles)).toBe('Home');
+    expect(humanizePath('/about', titles)).toBe('About');
+    expect(humanizePath('/projects', titles)).toBe('Projects');
+  });
+
+  it('normalises a single trailing slash before labelling', () => {
+    expect(humanizePath('/about/', titles)).toBe('About');
+  });
+
+  it('resolves a known project id to its title', () => {
+    expect(humanizePath(`/projects/${UUID}`, titles)).toBe('My Cool Project');
+  });
+
+  it('leaves an unknown/probe project id as the raw path', () => {
+    const unknown = '/projects/00000000-0000-4000-8000-000000000000';
+    expect(humanizePath(unknown, titles)).toBe(unknown);
+  });
+
+  it('returns an unrelated path unchanged', () => {
+    expect(humanizePath('/projects/not-a-uuid', titles)).toBe(
+      '/projects/not-a-uuid',
+    );
+    expect(humanizePath('/cmd_sco', titles)).toBe('/cmd_sco');
+  });
+});
+
+describe('faviconUrl', () => {
+  it('builds a Google S2 favicon URL for a host', () => {
+    expect(faviconUrl('google.com')).toBe(
+      'https://www.google.com/s2/favicons?domain=google.com&sz=32',
+    );
+  });
+
+  it('encodes the host so it cannot break out of the query string', () => {
+    expect(faviconUrl('a b&c')).toBe(
+      'https://www.google.com/s2/favicons?domain=a%20b%26c&sz=32',
+    );
   });
 });
