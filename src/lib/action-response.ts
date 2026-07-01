@@ -1,6 +1,5 @@
 export type ActionResponse<T = void> =
-  | { success: true; data: T }
-  | { success: false; error: string };
+  { success: true; data: T } | { success: false; error: string };
 
 export function actionSuccess<T>(data: T): ActionResponse<T> {
   return { success: true, data };
