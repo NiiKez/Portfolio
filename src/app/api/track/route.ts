@@ -10,8 +10,10 @@ import {
 } from '@/lib/analytics';
 import { isBotUserAgent } from '@/lib/bot-filter';
 import { getClientIp } from '@/lib/client-ip';
+import { logger } from '@/lib/logger';
 import { isPublishedProject } from '@/lib/queries/projects';
 import { rateLimit } from '@/lib/rate-limit';
+import { serializeError } from '@/lib/serialize-error';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 
@@ -118,8 +120,13 @@ export async function POST(request: NextRequest) {
       } = await (await createClient()).auth.getUser();
       if (isAdminEmail(user?.email)) return noContent();
     }
-  } catch {
+  } catch (error) {
     // Fail open: an auth lookup failure must never break the quiet contract.
+    // Dev-only breadcrumb (suppressed in prod) — a sustained failure here would
+    // silently count admin self-views as organic traffic.
+    logger.debug('track: self-view auth check failed open', {
+      err: serializeError(error),
+    });
   }
 
   // A `/projects/{uuid}` path can pass the shape gate yet still be a probe at a
@@ -130,8 +137,14 @@ export async function POST(request: NextRequest) {
   if (projectId) {
     try {
       if (!(await isPublishedProject(projectId))) return noContent();
-    } catch {
-      // Fail open: count the view rather than lose it.
+    } catch (error) {
+      // Fail open: count the view rather than lose it. Dev-only breadcrumb
+      // (suppressed in prod) — a sustained failure would count probes at
+      // fake/draft ids as real views.
+      logger.debug('track: project existence check failed open', {
+        path,
+        err: serializeError(error),
+      });
     }
   }
 
@@ -146,11 +159,19 @@ export async function POST(request: NextRequest) {
     if (error) {
       // PostgREST resolves (not rejects) on a DB error, so the catch below
       // never sees it. Log server-side only (never to the visitor) so a silent
-      // total failure — e.g. schema drift or a missing table — is observable.
-      console.warn('[track] page_views insert failed:', error.message);
+      // total failure — e.g. schema drift or a missing table — is observable
+      // (this path had a silent zero-rows outage before; keep it visible).
+      logger.warn('track: page_views insert failed', {
+        err: serializeError(error),
+      });
     }
-  } catch {
-    // Swallow: analytics is non-critical and must stay invisible to visitors.
+  } catch (error) {
+    // Swallow (stay invisible to visitors), but record it — a thrown insert
+    // (e.g. the admin client failing to construct) is the same failure class as
+    // the resolved DB error above and must not vanish.
+    logger.warn('track: page_views insert threw', {
+      err: serializeError(error),
+    });
   }
 
   return noContent();

@@ -24,6 +24,10 @@ vi.mock('@/lib/site-url', () => ({
   getBaseUrl: () => 'https://portfolio.example',
 }));
 
+vi.mock('@/lib/logger', () => ({
+  logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
 const signInWithOtp = vi.fn();
 vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(async () => ({
@@ -32,6 +36,7 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 import { POST } from '@/app/api/auth/send-otp/route';
+import { logger } from '@/lib/logger';
 
 function makeRequest(
   body: string | null,
@@ -238,6 +243,12 @@ describe('POST /api/auth/send-otp', () => {
 
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: 'Failed to send sign-in link.' });
+    // The failure is logged server-side (login is a recurring pain point), but
+    // the requester's email must never be logged (PII).
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(vi.mocked(logger.error).mock.calls)).not.toContain(
+      'admin@example.com',
+    );
   });
 
   it('keys the rate limit on the trusted (rightmost) x-forwarded-for IP, not the spoofable leftmost one', async () => {

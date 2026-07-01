@@ -10,6 +10,7 @@ import {
 } from '@/lib/action-response';
 import { isAdminEmail } from '@/lib/admin-email';
 import { logger } from '@/lib/logger';
+import { serializeError } from '@/lib/serialize-error';
 import { createClient } from '@/lib/supabase/server';
 
 type SafeActionContext = {
@@ -40,11 +41,13 @@ export function safeAction<TInput, TOutput>({
   return async function action(
     rawInput: unknown,
   ): Promise<ActionResponse<TOutput>> {
+    // Hoisted so the catch can attribute an unhandled error to the caller.
+    let user: User | null = null;
     try {
       const supabase = await createClient();
-      const {
+      ({
         data: { user },
-      } = await supabase.auth.getUser();
+      } = await supabase.auth.getUser());
 
       if (!user || !isAdminEmail(user.email)) {
         logger.warn('safeAction: unauthorized', {
@@ -57,9 +60,15 @@ export function safeAction<TInput, TOutput>({
       const parsed = schema.safeParse(rawInput);
       if (!parsed.success) {
         const message = formatZodError(parsed.error);
+        // Log only path + code, never the raw issue objects — a future custom
+        // refine message or `unrecognized_keys` issue could otherwise echo the
+        // submitted value/key into the logs.
         logger.info('safeAction: validation failed', {
           action: name,
-          issues: parsed.error.issues,
+          issues: parsed.error.issues.map((issue) => ({
+            path: issue.path.join('.'),
+            code: issue.code,
+          })),
         });
         return actionError(message);
       }
@@ -70,8 +79,8 @@ export function safeAction<TInput, TOutput>({
     } catch (error) {
       logger.error('safeAction: unhandled error', {
         action: name,
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
+        userId: user?.id ?? null,
+        err: serializeError(error),
       });
       return actionError('Something went wrong. Please try again.');
     }

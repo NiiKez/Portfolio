@@ -12,7 +12,12 @@ export default function AdminError({
   unstable_retry: () => void;
 }) {
   useEffect(() => {
-    console.error(error);
+    // Client boundary — cannot use the server-only winston logger. Log to the
+    // console only in development so full error detail is not surfaced in an
+    // end-user's console in production (mirrors the root error boundary).
+    if (process.env.NODE_ENV !== 'production') {
+      console.error(error);
+    }
   }, [error]);
 
   return (

@@ -29,6 +29,11 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Keep winston out of the server bundle — it resolves its transports/formats
+  // through dynamic requires, which a bundler either warns on or mis-resolves at
+  // runtime (and can duplicate across chunks). Requiring it from node_modules at
+  // runtime avoids that and keeps a single logger instance.
+  serverExternalPackages: ['winston'],
   // Drop the `X-Powered-By: Next.js` header — standard hardening that removes a
   // free framework-fingerprinting signal from every response.
   poweredByHeader: false,
