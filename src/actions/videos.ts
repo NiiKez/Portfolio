@@ -10,7 +10,9 @@ import {
 } from '@/lib/action-response';
 import { isAdminEmail } from '@/lib/admin-email';
 import { logger } from '@/lib/logger';
+import { serializeError } from '@/lib/serialize-error';
 import { safeAction } from '@/lib/safe-action';
+import { logStorageCleanupFailure } from '@/lib/storage-cleanup';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 
@@ -195,7 +197,7 @@ export const setProjectVideo = safeAction<
       await storage
         .from(VIDEO_BUCKET)
         .remove([storagePath])
-        .catch(() => undefined);
+        .catch(logStorageCleanupFailure('videos.set', { projectId }));
       throw new Error('Uploaded video is too large');
     }
 
@@ -204,7 +206,7 @@ export const setProjectVideo = safeAction<
       await storage
         .from(VIDEO_BUCKET)
         .remove([storagePath])
-        .catch(() => undefined);
+        .catch(logStorageCleanupFailure('videos.set', { projectId }));
       throw new Error('Uploaded file is not a video');
     }
 
@@ -230,7 +232,7 @@ export const setProjectVideo = safeAction<
       await storage
         .from(VIDEO_BUCKET)
         .remove([storagePath])
-        .catch(() => undefined);
+        .catch(logStorageCleanupFailure('videos.set', { projectId }));
       throw updateError;
     }
 
@@ -239,7 +241,7 @@ export const setProjectVideo = safeAction<
       await storage
         .from(VIDEO_BUCKET)
         .remove([previousPath])
-        .catch(() => undefined);
+        .catch(logStorageCleanupFailure('videos.set', { projectId }));
     }
 
     revalidateVideoSurfaces(projectId);
@@ -271,6 +273,7 @@ export const discardVideoUpload = safeAction<
       logger.warn('videos.discardUpload: cleanup failed', {
         action: 'videos.discardUpload',
         projectId,
+        err: serializeError(error),
       });
     }
     return { discarded: !error };
@@ -322,7 +325,7 @@ export const removeProjectVideo = safeAction<
       await createAdminClient()
         .storage.from(VIDEO_BUCKET)
         .remove([previousPath])
-        .catch(() => undefined);
+        .catch(logStorageCleanupFailure('videos.remove', { projectId }));
     }
 
     if (previousPosterPath) {
@@ -331,7 +334,7 @@ export const removeProjectVideo = safeAction<
       await supabase.storage
         .from(POSTER_BUCKET)
         .remove([previousPosterPath])
-        .catch(() => undefined);
+        .catch(logStorageCleanupFailure('videos.remove', { projectId }));
     }
 
     revalidateVideoSurfaces(projectId);
@@ -393,7 +396,7 @@ export async function setProjectVideoPoster(
     if (uploadError) {
       logger.error('videos.setPoster: storage upload failed', {
         action: 'videos.setPoster',
-        error: uploadError.message,
+        err: serializeError(uploadError),
       });
       return actionError('Something went wrong. Please try again.');
     }
@@ -423,10 +426,10 @@ export async function setProjectVideoPoster(
       await supabase.storage
         .from(POSTER_BUCKET)
         .remove([storagePath])
-        .catch(() => undefined);
+        .catch(logStorageCleanupFailure('videos.setPoster', { projectId }));
       logger.error('videos.setPoster: row update failed', {
         action: 'videos.setPoster',
-        error: updateError.message,
+        err: serializeError(updateError),
       });
       return actionError('Something went wrong. Please try again.');
     }
@@ -435,7 +438,7 @@ export async function setProjectVideoPoster(
       await supabase.storage
         .from(POSTER_BUCKET)
         .remove([previousPosterPath])
-        .catch(() => undefined);
+        .catch(logStorageCleanupFailure('videos.setPoster', { projectId }));
     }
 
     revalidateVideoSurfaces(projectId);
@@ -443,8 +446,7 @@ export async function setProjectVideoPoster(
   } catch (error) {
     logger.error('videos.setPoster: unhandled error', {
       action: 'videos.setPoster',
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
+      err: serializeError(error),
     });
     return actionError('Something went wrong. Please try again.');
   }
@@ -489,7 +491,7 @@ export const removeProjectVideoPoster = safeAction<
       await supabase.storage
         .from(POSTER_BUCKET)
         .remove([previousPosterPath])
-        .catch(() => undefined);
+        .catch(logStorageCleanupFailure('videos.removePoster', { projectId }));
     }
 
     revalidateVideoSurfaces(projectId);

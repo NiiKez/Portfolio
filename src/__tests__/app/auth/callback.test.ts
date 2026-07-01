@@ -11,6 +11,10 @@ vi.mock('@/lib/env', () => ({
   },
 }));
 
+vi.mock('@/lib/logger', () => ({
+  logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
 const rateLimitMock = vi.fn();
 vi.mock('@/lib/rate-limit', () => ({
   rateLimit: (...args: unknown[]) => rateLimitMock(...args),
@@ -26,6 +30,7 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 import { GET } from '@/app/auth/callback/route';
+import { logger } from '@/lib/logger';
 
 function makeRequest(url = 'http://localhost:3000/auth/callback?code=abc') {
   return new NextRequest(url);
@@ -78,11 +83,12 @@ describe('GET /auth/callback', () => {
     expect(loc.pathname).toBe('/admin/login');
     expect(loc.searchParams.get('error')).toBe('auth_failed');
     expect(getUser).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledTimes(1);
   });
 
   it('signs out and redirects to ?error=unauthorized for a non-admin user', async () => {
     getUser.mockResolvedValue({
-      data: { user: { email: 'intruder@example.com' } },
+      data: { user: { id: 'intruder-id', email: 'intruder@example.com' } },
     });
 
     const res = await GET(makeRequest());
@@ -92,6 +98,11 @@ describe('GET /auth/callback', () => {
     const loc = location(res);
     expect(loc.pathname).toBe('/admin/login');
     expect(loc.searchParams.get('error')).toBe('unauthorized');
+    // The rejection is logged, but the email is never included (PII).
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain(
+      'intruder@example.com',
+    );
   });
 
   it('redirects an admin user to /admin without signing out', async () => {

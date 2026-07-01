@@ -2,8 +2,10 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 
 import { getClientIp } from '@/lib/client-ip';
+import { logger } from '@/lib/logger';
 import { createClient } from '@/lib/supabase/server';
 import { rateLimit } from '@/lib/rate-limit';
+import { serializeError } from '@/lib/serialize-error';
 import { getBaseUrl } from '@/lib/site-url';
 
 const schema = z.object({ email: z.email() });
@@ -69,6 +71,13 @@ export async function POST(request: NextRequest) {
   });
 
   if (error) {
+    // The admin's only login path. Log the failure (an SMTP outage, a
+    // redirect-allowlist mismatch, or a `shouldCreateUser:false` rejection all
+    // collapse into one generic client message) so login breakage is
+    // diagnosable server-side. Never log the email address (PII).
+    logger.error('send-otp: signInWithOtp failed', {
+      err: serializeError(error),
+    });
     return NextResponse.json(
       { error: 'Failed to send sign-in link.' },
       { status: 400 },

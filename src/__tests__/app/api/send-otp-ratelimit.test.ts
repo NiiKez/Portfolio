@@ -19,6 +19,10 @@ vi.mock('@/lib/site-url', () => ({
   getBaseUrl: () => 'https://portfolio.example',
 }));
 
+vi.mock('@/lib/logger', () => ({
+  logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
 const signInWithOtp = vi.fn();
 vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(async () => ({

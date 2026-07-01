@@ -6,6 +6,8 @@ import { z } from 'zod';
 import { logger } from '@/lib/logger';
 import { assertReorderIdsExist, distinctReorderIds } from '@/lib/reorder';
 import { safeAction } from '@/lib/safe-action';
+import { serializeError } from '@/lib/serialize-error';
+import { logStorageCleanupFailure } from '@/lib/storage-cleanup';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import {
@@ -81,7 +83,7 @@ export const createProject = safeAction<ProjectInput, Project>({
           logger.error('projects.create: compensation delete failed', {
             action: 'projects.create',
             projectId: project.id,
-            error: cleanupError.message,
+            err: serializeError(cleanupError),
           });
         }
         throw linkError;
@@ -165,7 +167,7 @@ export const deleteProject = safeAction<DeleteProjectInput, { id: string }>({
       await supabase.storage
         .from('screenshots')
         .remove(paths)
-        .catch(() => undefined);
+        .catch(logStorageCleanupFailure('projects.delete', { projectId: id }));
     }
 
     // The poster lives in the screenshots bucket (not project_screenshots).
@@ -173,7 +175,7 @@ export const deleteProject = safeAction<DeleteProjectInput, { id: string }>({
       await supabase.storage
         .from('screenshots')
         .remove([posterPath])
-        .catch(() => undefined);
+        .catch(logStorageCleanupFailure('projects.delete', { projectId: id }));
     }
 
     if (videoPath) {
@@ -185,7 +187,7 @@ export const deleteProject = safeAction<DeleteProjectInput, { id: string }>({
       await createAdminClient()
         .storage.from('videos')
         .remove([videoPath])
-        .catch(() => undefined);
+        .catch(logStorageCleanupFailure('projects.delete', { projectId: id }));
     }
 
     revalidateProjectSurfaces(id);

@@ -39,6 +39,10 @@ export default defineConfig({
         'src/lib/queries/skills.ts',
         // Winston transport configuration — infrastructure, no logic to test.
         'src/lib/logger.ts',
+        // Next.js instrumentation hook — process-level handlers + dynamic
+        // runtime-guarded imports; infrastructure wiring, no logic to test.
+        'src/instrumentation.ts',
+        'src/instrumentation.node.ts',
         'src/lib/profile.ts',
         'src/components/admin/markdown-editor.tsx',
         'src/components/admin/sortable-list.tsx',

@@ -12,6 +12,8 @@ import { isAdminEmail } from '@/lib/admin-email';
 import { logger } from '@/lib/logger';
 import { assertReorderIdsExist, distinctReorderIds } from '@/lib/reorder';
 import { safeAction } from '@/lib/safe-action';
+import { serializeError } from '@/lib/serialize-error';
+import { logStorageCleanupFailure } from '@/lib/storage-cleanup';
 import { createClient } from '@/lib/supabase/server';
 import { reorderSchema, type ReorderInput } from '@/lib/validations';
 import type { ProjectScreenshot } from '@/types';
@@ -142,7 +144,7 @@ export async function uploadScreenshot(
     if (uploadError) {
       logger.error('screenshots.upload: storage upload failed', {
         action: 'screenshots.upload',
-        error: uploadError.message,
+        err: serializeError(uploadError),
       });
       return actionError('Something went wrong. Please try again.');
     }
@@ -161,7 +163,7 @@ export async function uploadScreenshot(
       await supabase.storage
         .from('screenshots')
         .remove([storagePath])
-        .catch(() => undefined);
+        .catch(logStorageCleanupFailure('screenshots.upload', { project_id }));
       throw maxOrderError;
     }
 
@@ -184,7 +186,7 @@ export async function uploadScreenshot(
       await supabase.storage
         .from('screenshots')
         .remove([storagePath])
-        .catch(() => undefined);
+        .catch(logStorageCleanupFailure('screenshots.upload', { project_id }));
       throw error;
     }
 
@@ -193,8 +195,7 @@ export async function uploadScreenshot(
   } catch (error) {
     logger.error('screenshots.upload: unhandled error', {
       action: 'screenshots.upload',
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
+      err: serializeError(error),
     });
     return actionError('Something went wrong. Please try again.');
   }
@@ -235,7 +236,7 @@ export const deleteScreenshot = safeAction<
       await supabase.storage
         .from('screenshots')
         .remove([storage_path])
-        .catch(() => undefined);
+        .catch(logStorageCleanupFailure('screenshots.delete', { project_id }));
     }
 
     revalidateScreenshotSurfaces(project_id);

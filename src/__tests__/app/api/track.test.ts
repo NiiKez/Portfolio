@@ -29,7 +29,12 @@ vi.mock('@/lib/queries/projects', () => ({
   isPublishedProject: (...args: unknown[]) => isPublishedProjectMock(...args),
 }));
 
+vi.mock('@/lib/logger', () => ({
+  logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
 import { POST } from '@/app/api/track/route';
+import { logger } from '@/lib/logger';
 
 const UUID = '9712e2a6-e7b8-49fa-a82d-912c70e85c28';
 
@@ -341,28 +346,32 @@ describe('POST /api/track', () => {
     expect(fromMock).toHaveBeenCalledWith('page_views');
   });
 
-  it('swallows a storage failure and still returns 204', async () => {
+  it('swallows a thrown storage failure, logs it, and still returns 204', async () => {
     insertMock.mockRejectedValue(new Error('db down'));
 
     const res = await POST(makeRequest(JSON.stringify({ path: '/' })));
 
     expect(res.status).toBe(204);
     expect(insertMock).toHaveBeenCalled();
+    // A thrown insert is the same failure class as a resolved DB error — it must
+    // be recorded (structured), not silently swallowed.
+    expect(logger.warn).toHaveBeenCalledTimes(1);
   });
 
   it('returns 204 and logs server-side when the insert resolves with a DB error', async () => {
     // PostgREST resolves with `{ error }` rather than throwing, so the route
     // must surface it to the server log (never to the visitor) and still 204.
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     insertMock.mockResolvedValue({ error: { message: 'relation missing' } });
 
     const res = await POST(makeRequest(JSON.stringify({ path: '/' })));
 
     expect(res.status).toBe(204);
-    expect(warn).toHaveBeenCalledWith(
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining('insert failed'),
-      'relation missing',
+      expect.objectContaining({
+        err: expect.objectContaining({ message: 'relation missing' }),
+      }),
     );
-    warn.mockRestore();
   });
 });
