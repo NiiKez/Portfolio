@@ -17,6 +17,19 @@ updates:
         update-types:
           - minor
           - patch
+    # Pin these to their current majors — Dependabot still opens minor/patch
+    # PRs, but not a major that would outrun the runtime or break the build.
+    ignore:
+      # @types/node tracks the Node runtime major (Node 22); a major ahead of it
+      # would type-check code against APIs the runtime doesn't ship.
+      - dependency-name: '@types/node'
+        update-types:
+          - 'version-update:semver-major'
+      # eslint stays on 9 — eslint-config-next's eslint-plugin-react is not
+      # eslint-10 compatible yet.
+      - dependency-name: 'eslint'
+        update-types:
+          - 'version-update:semver-major'
 
   # Keep the GitHub Actions used by CI current (also clears the Node 20
   # deprecation warning by moving checkout/setup-node off their stale majors).
