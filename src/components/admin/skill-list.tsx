@@ -32,9 +32,7 @@ const PROFICIENCY_PERCENT: Record<Proficiency, number> = {
 };
 
 type FormDialogState =
-  | { mode: 'closed' }
-  | { mode: 'create' }
-  | { mode: 'edit'; skill: Skill };
+  { mode: 'closed' } | { mode: 'create' } | { mode: 'edit'; skill: Skill };
 
 type SkillListProps = {
   initialSkills: Skill[];

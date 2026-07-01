@@ -21,11 +21,7 @@ export type Json =
 
 type Proficiency = 'beginner' | 'intermediate' | 'advanced';
 type ExperienceKind =
-  | 'Internship'
-  | 'Thesis'
-  | 'Working Student'
-  | 'Full-time'
-  | 'Freelance';
+  'Internship' | 'Thesis' | 'Working Student' | 'Full-time' | 'Freelance';
 
 export type Database = {
   portfolio: {

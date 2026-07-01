@@ -11,11 +11,7 @@ export type Skill = {
 };
 
 export type ExperienceKind =
-  | 'Internship'
-  | 'Thesis'
-  | 'Working Student'
-  | 'Full-time'
-  | 'Freelance';
+  'Internship' | 'Thesis' | 'Working Student' | 'Full-time' | 'Freelance';
 
 export type Experience = {
   id: string;
