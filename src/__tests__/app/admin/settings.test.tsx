@@ -20,7 +20,7 @@ vi.mock('@/components/admin/account-security', () => ({
   AccountSecurity: () => <div data-testid="account-security" />,
 }));
 
-import SettingsPage from '@/app/admin/settings/page';
+import SettingsPage from '@/app/admin/(dashboard)/settings/page';
 
 beforeEach(() => {
   vi.clearAllMocks();

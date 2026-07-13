@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { redirect } from 'next/navigation';
 
 import { AdminNav } from '@/components/admin/admin-nav';
 import { AdminSidebar } from '@/components/admin/admin-sidebar';
@@ -6,7 +7,18 @@ import { Toaster } from '@/components/ui/sonner';
 import { isAdminEmail } from '@/lib/admin-email';
 import { createClient } from '@/lib/supabase/server';
 
-export default async function AdminLayout({
+/**
+ * Gate for every authenticated admin page. `/admin/login` deliberately lives
+ * OUTSIDE this `(dashboard)` route group, so this layout can hard-redirect any
+ * non-admin without looping the login page through its own gate.
+ *
+ * This is a second, render-time enforcement point that does NOT depend on the
+ * middleware: a server-validated `getUser()` runs here on every admin page, so
+ * even if the middleware were ever bypassed (a matcher gap, a framework-level
+ * middleware bug), the pages themselves still fail closed. RLS remains the real
+ * data-access enforcement; this keeps the admin UI from rendering at all.
+ */
+export default async function AdminDashboardLayout({
   children,
 }: {
   children: ReactNode;
@@ -17,12 +29,7 @@ export default async function AdminLayout({
   } = await supabase.auth.getUser();
 
   if (!user || !isAdminEmail(user.email)) {
-    return (
-      <>
-        {children}
-        <Toaster />
-      </>
-    );
+    redirect('/admin/login');
   }
 
   return (

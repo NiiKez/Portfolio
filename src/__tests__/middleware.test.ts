@@ -240,6 +240,29 @@ describe('CSP nonce', () => {
       /script-src[^;]*'nonce-[A-Za-z0-9+/=]+'/,
     );
   });
+
+  it('carries refreshed auth cookies onto the admin→login redirect', async () => {
+    // updateSession() may rotate the auth token onto `response`; the redirect
+    // must forward those Set-Cookie headers or the browser keeps a consumed
+    // refresh token and trips Supabase reuse-detection (spurious logout).
+    const response = mockSession(null);
+    response.cookies.set('sb-access-token', 'refreshed', { path: '/' });
+
+    const result = await middleware(requestFor('/admin/projects'));
+
+    expect(result.status).toBe(307);
+    expect(result.cookies.get('sb-access-token')?.value).toBe('refreshed');
+  });
+
+  it('carries refreshed auth cookies onto the login→/admin redirect', async () => {
+    const response = mockSession({ email: 'admin@example.com' });
+    response.cookies.set('sb-refresh-token', 'rotated', { path: '/' });
+
+    const result = await middleware(requestFor('/admin/login'));
+
+    expect(result.status).toBe(307);
+    expect(result.cookies.get('sb-refresh-token')?.value).toBe('rotated');
+  });
 });
 
 describe('site password gate', () => {
@@ -344,5 +367,12 @@ describe('config.matcher', () => {
     expect(matcher.test('/_next/static/chunk.js')).toBe(false);
     expect(matcher.test('/favicon.ico')).toBe(false);
     expect(matcher.test('/logo.png')).toBe(false);
+  });
+
+  it('re-includes the whole /admin subtree so an extension suffix cannot bypass the gate', () => {
+    // The first pattern excludes any path ending in an image extension — which
+    // would let `/admin/projects/x.png` skip the auth gate + CSP. A second,
+    // unconditional `/admin/:path*` entry (Next unions matchers) closes that.
+    expect(config.matcher).toContain('/admin/:path*');
   });
 });

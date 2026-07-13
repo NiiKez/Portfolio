@@ -1,12 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
+import { isSameOrigin } from '@/lib/same-origin';
 import { createClient } from '@/lib/supabase/server';
 
 async function signOut(request: NextRequest) {
-  const origin = request.headers.get('origin');
-  const host = request.headers.get('host');
-
-  if (!origin || !host || new URL(origin).host !== host) {
+  if (!isSameOrigin(request)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

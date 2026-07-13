@@ -93,7 +93,10 @@ describe('GET /auth/callback', () => {
 
     const res = await GET(makeRequest());
 
+    // Local scope only: revoke the just-minted session, not every session for
+    // this identity across the shared Supabase instance (cross-app logout).
     expect(signOut).toHaveBeenCalledTimes(1);
+    expect(signOut).toHaveBeenCalledWith({ scope: 'local' });
     expect(res.status).toBe(307);
     const loc = location(res);
     expect(loc.pathname).toBe('/admin/login');

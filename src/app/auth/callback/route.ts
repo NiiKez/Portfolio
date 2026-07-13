@@ -43,7 +43,17 @@ export async function GET(request: NextRequest) {
     logger.warn('auth.callback: non-admin rejected', {
       userId: user?.id ?? null,
     });
-    await supabase.auth.signOut();
+    // Local scope: revoke only the session this exchange just minted. A global
+    // sign-out would revoke every refresh token for that identity across the
+    // whole Supabase instance — an unrelated cross-app logout. Never let a
+    // failed sign-out swallow the rejection: fail closed to the redirect.
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch (error) {
+      logger.warn('auth.callback: non-admin sign-out failed', {
+        err: serializeError(error),
+      });
+    }
     return NextResponse.redirect(`${origin}/admin/login?error=unauthorized`);
   }
 

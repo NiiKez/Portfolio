@@ -5,17 +5,26 @@ import { getClientIp } from '@/lib/client-ip';
 import { logger } from '@/lib/logger';
 import { createClient } from '@/lib/supabase/server';
 import { rateLimit } from '@/lib/rate-limit';
+import { isSameOrigin } from '@/lib/same-origin';
 import { serializeError } from '@/lib/serialize-error';
 import { getBaseUrl } from '@/lib/site-url';
 
-const schema = z.object({ email: z.email() });
+// Cap the local-part/domain length (RFC 5321 max) so a caller can't mint an
+// unbounded rate-limit key or hand an absurd string to the auth provider.
+const schema = z.object({ email: z.email().max(254) });
 
 const WINDOW_MS = 15 * 60 * 1000;
+
+// Auth responses must never be cached by an intermediary.
+const NO_STORE = { 'Cache-Control': 'no-store' } as const;
 
 function tooManyRequests(retryAfter: number) {
   return NextResponse.json(
     { error: 'Too many requests. Please try again later.' },
-    { status: 429, headers: { 'Retry-After': String(retryAfter) } },
+    {
+      status: 429,
+      headers: { 'Retry-After': String(retryAfter), ...NO_STORE },
+    },
   );
 }
 
@@ -23,10 +32,11 @@ export async function POST(request: NextRequest) {
   // Same-origin guard: this endpoint is only ever called by the login form via
   // a same-origin fetch, so reject cross-site POSTs. Without this, any website
   // could trigger magic-link emails to arbitrary addresses (email bombing).
-  const origin = request.headers.get('origin');
-  const host = request.headers.get('host');
-  if (!origin || !host || new URL(origin).host !== host) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!isSameOrigin(request)) {
+    return NextResponse.json(
+      { error: 'Forbidden' },
+      { status: 403, headers: NO_STORE },
+    );
   }
 
   const ip = getClientIp(request);
@@ -41,7 +51,7 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json(
       { error: 'Invalid email address.' },
-      { status: 400 },
+      { status: 400, headers: NO_STORE },
     );
   }
 
@@ -73,16 +83,18 @@ export async function POST(request: NextRequest) {
   if (error) {
     // The admin's only login path. Log the failure (an SMTP outage, a
     // redirect-allowlist mismatch, or a `shouldCreateUser:false` rejection all
-    // collapse into one generic client message) so login breakage is
-    // diagnosable server-side. Never log the email address (PII).
+    // collapse into one server-side log line) so login breakage is diagnosable.
+    // Never log the email address (PII).
     logger.error('send-otp: signInWithOtp failed', {
       err: serializeError(error),
     });
-    return NextResponse.json(
-      { error: 'Failed to send sign-in link.' },
-      { status: 400 },
-    );
   }
 
-  return NextResponse.json({ success: true });
+  // Always return the same 200 whether or not the address exists. With
+  // `shouldCreateUser:false`, the provider errors for an address with no
+  // account — surfacing that as a distinct status would turn this endpoint into
+  // a registered-vs-unregistered enumeration oracle (probe-able against any
+  // account on the instance, including the admin). The client shows the same
+  // "check your inbox" copy regardless; failures are only visible server-side.
+  return NextResponse.json({ success: true }, { headers: NO_STORE });
 }
