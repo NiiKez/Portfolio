@@ -234,17 +234,22 @@ describe('POST /api/auth/send-otp', () => {
     });
   });
 
-  it('returns 400 when signInWithOtp reports an error', async () => {
+  it('returns the same 200 when signInWithOtp errors (no enumeration oracle)', async () => {
+    // Security invariant: with `shouldCreateUser:false` the provider errors for
+    // an address that has no account. Surfacing that as a distinct status (the
+    // old 400) turned this endpoint into a registered-vs-unregistered oracle.
+    // The response must be byte-identical to the success case; the failure is
+    // only visible server-side. A regression to a differential status fails here.
     signInWithOtp.mockResolvedValue({ error: { message: 'smtp down' } });
 
     const res = await POST(
       makeRequest(JSON.stringify({ email: 'admin@example.com' })),
     );
 
-    expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ error: 'Failed to send sign-in link.' });
-    // The failure is logged server-side (login is a recurring pain point), but
-    // the requester's email must never be logged (PII).
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ success: true });
+    // The failure is still logged server-side (login is a recurring pain
+    // point), but the requester's email must never be logged (PII).
     expect(logger.error).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(vi.mocked(logger.error).mock.calls)).not.toContain(
       'admin@example.com',

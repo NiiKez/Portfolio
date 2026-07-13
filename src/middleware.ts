@@ -69,22 +69,28 @@ export async function middleware(request: NextRequest) {
   const isAdminRoute = pathname.startsWith('/admin');
   const isAdmin = isAdminEmail(user?.email);
 
-  if (isAdminRoute && !isLoginRoute && !isAdmin) {
+  // Build a redirect that carries the CSP AND any auth cookies refreshed by
+  // updateSession(). Dropping the refreshed cookies would leave the browser
+  // holding an already-rotated refresh token, which can trip Supabase's
+  // reuse-detection and silently log the admin out on the next request.
+  function redirectTo(target: string) {
     const url = request.nextUrl.clone();
-    url.pathname = '/admin/login';
+    url.pathname = target;
     url.search = '';
     const redirect = NextResponse.redirect(url);
     redirect.headers.set('Content-Security-Policy', csp);
+    for (const cookie of response.cookies.getAll()) {
+      redirect.cookies.set(cookie);
+    }
     return redirect;
   }
 
+  if (isAdminRoute && !isLoginRoute && !isAdmin) {
+    return redirectTo('/admin/login');
+  }
+
   if (isLoginRoute && isAdmin) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/admin';
-    url.search = '';
-    const redirect = NextResponse.redirect(url);
-    redirect.headers.set('Content-Security-Policy', csp);
-    return redirect;
+    return redirectTo('/admin');
   }
 
   return response;
@@ -97,5 +103,12 @@ export const config = {
      * Required so Supabase can refresh the auth token on every response.
      */
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    /*
+     * The pattern above excludes ANY path ending in a static-asset extension —
+     * including under /admin (e.g. `/admin/projects/x.png`), which would let an
+     * admin route skip the auth gate + CSP entirely. Re-include the whole /admin
+     * subtree unconditionally so no extension suffix can bypass the middleware.
+     */
+    '/admin/:path*',
   ],
 };

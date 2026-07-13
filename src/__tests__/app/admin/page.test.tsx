@@ -14,7 +14,7 @@ vi.mock('@/lib/supabase/server', () => ({
 
 vi.mock('@/lib/profile', () => ({ profile: { name: 'Test Admin' } }));
 
-import AdminDashboardPage from '@/app/admin/page';
+import AdminDashboardPage from '@/app/admin/(dashboard)/page';
 
 beforeEach(() => {
   vi.clearAllMocks();
